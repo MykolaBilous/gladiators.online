@@ -1,15 +1,12 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import type { EngineOptions } from "@babylonjs/core/Engines/thinEngine";
 import type { Scene } from "@babylonjs/core/scene";
+import type { GameConfig } from "../config/gameConfigTypes";
 import { GameInput } from "../input/GameInput";
-import type { GameConfig } from "../config/gameConfig";
 import { createBootScene } from "./createBootScene";
+import type { GameClientOptions } from "./gameTypes";
 
-interface GameClientOptions {
-  readonly canvas: HTMLCanvasElement;
-  readonly config: GameConfig;
-  readonly onStatusChange?: (message: string) => void;
-}
+export type { GameClientOptions } from "./gameTypes";
 
 export class GameClient {
   readonly canvas: HTMLCanvasElement;

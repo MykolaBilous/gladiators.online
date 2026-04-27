@@ -1,15 +1,10 @@
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
-import type { Engine } from "@babylonjs/core/Engines/engine";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
-import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
+import type { CreateBootSceneOptions } from "./gameTypes";
 
-interface CreateBootSceneOptions {
-  readonly engine: Engine;
-  readonly canvas: HTMLCanvasElement;
-  readonly clearColor: Color4;
-}
+export type { CreateBootSceneOptions } from "./gameTypes";
 
 export const createBootScene = ({ engine, canvas, clearColor }: CreateBootSceneOptions): Scene => {
   const scene = new Scene(engine);

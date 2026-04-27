@@ -1,40 +1,15 @@
 import "./styles.css";
-import { gameConfig } from "./config/gameConfig";
-import { GameClient } from "./game/GameClient";
+import { createGladiatorShowcase } from "./ui/gladiatorShowcase";
 
-const canvas = document.querySelector<HTMLCanvasElement>(`#${gameConfig.canvasId}`);
-const status = document.querySelector<HTMLDivElement>("#app-status");
+const app = document.querySelector<HTMLElement>("#app");
 
-if (!canvas) {
-  throw new Error(`Missing canvas element #${gameConfig.canvasId}`);
+if (!app) {
+  throw new Error("Missing #app element");
 }
 
-const setStatus = (message: string): void => {
-  if (status) {
-    status.textContent = message;
-  }
-};
-
-const game = new GameClient({
-  canvas,
-  config: gameConfig,
-  onStatusChange: setStatus,
-});
-
-try {
-  await game.start();
-
-  if (import.meta.env.DEV) {
-    const { installBabylonInspectorShortcut } = await import(
-      "./game/installBabylonInspectorShortcut"
-    );
-    installBabylonInspectorShortcut(game.scene);
-  }
-} catch (error) {
-  console.error(error);
-  setStatus("Failed to start");
-}
+// Show gladiator showcase on the main page
+const disposeShowcase = createGladiatorShowcase(app);
 
 window.addEventListener("beforeunload", () => {
-  game.dispose();
+  disposeShowcase();
 });

@@ -1,8 +1,6 @@
-interface PointerState {
-  readonly id: number;
-  readonly x: number;
-  readonly y: number;
-}
+import type { PointerState } from "./inputTypes";
+
+export type { PointerState } from "./inputTypes";
 
 export class GameInput {
   private readonly canvas: HTMLCanvasElement;
