@@ -52,24 +52,26 @@ const JAVELIN_STARTING_COUNT = 3;
 const DEFAULT_STRIKE_REACH = createArenaReach(1);
 const DEFAULT_NET_REACH = createArenaReach(2);
 const DEFAULT_JAVELIN_REACH = {
-  min: metersToArenaDistance(1.85),
-  preferred: metersToArenaDistance(2.75),
-  max: metersToArenaDistance(2.75),
+  min: 0,
+  preferred: metersToArenaDistance(6),
+  max: 2,
 };
-const MAX_REACH_DISTANCE = metersToArenaDistance(2.75);
+const MAX_REACH_DISTANCE = 2;
 const MIN_REACH_WIDTH = metersToArenaDistance(0.08);
 const REACH_TOLERANCE = 0;
 const MIN_MOVEMENT_DISTANCE = metersToArenaDistance(0.06);
 const HOME_SIDE_SEPARATION = metersToArenaDistance(0.25);
 const LATERAL_ALIGNMENT_DISTANCE = metersToArenaDistance(0.1);
+const JAVELIN_ALIGNMENT_DISTANCE = metersToArenaDistance(0.7);
+const JAVELIN_SAFE_DISTANCE = metersToArenaDistance(2.45);
 const MIN_STEADY_STEP = metersToArenaDistance(0.4);
 const MAX_STEADY_STEP = metersToArenaDistance(0.75);
 const STEP_DURATION_MS = 360;
 const MOVEMENT_ENERGY_PER_STEP = 3.4;
-const ARENA_MIN_X = 0.08;
-const ARENA_MAX_X = 0.92;
-const ARENA_MIN_Y = 0.12;
-const ARENA_MAX_Y = 0.94;
+const ARENA_MIN_X = 0.04;
+const ARENA_MAX_X = 0.96;
+const ARENA_MIN_Y = 0.08;
+const ARENA_MAX_Y = 0.97;
 
 const randomBetween = (min: number, max: number): number =>
   min + Math.random() * (max - min);
@@ -231,8 +233,8 @@ function createStartPositions(
     const right = rightMembers[0]!;
 
     return applyRequestedPositions({
-      [left.id]: { x: 0.28, y: 0.72 },
-      [right.id]: { x: 0.72, y: 0.46 },
+      [left.id]: { x: 0.24, y: 0.74 },
+      [right.id]: { x: 0.76, y: 0.42 },
     });
   }
 
@@ -248,12 +250,12 @@ function createStartPositions(
       return;
     }
 
-    const minY = 0.34;
-    const maxY = 0.86;
+    const minY = 0.26;
+    const maxY = 0.9;
 
     members.forEach((gladiator, index) => {
       const t = index / (members.length - 1);
-      const lateralWobble = (index % 2 === 0 ? -1 : 1) * 0.045;
+      const lateralWobble = (index % 2 === 0 ? -1 : 1) * 0.07;
 
       positions[gladiator.id] = clampPoint({
         x: baseX + lateralWobble,
@@ -262,8 +264,8 @@ function createStartPositions(
     });
   };
 
-  placeTeam(leftMembers, 0.26);
-  placeTeam(rightMembers, 0.74);
+  placeTeam(leftMembers, 0.24);
+  placeTeam(rightMembers, 0.76);
 
   return applyRequestedPositions(positions);
 }
@@ -593,6 +595,29 @@ function createMovement(
 ): BattleMovement {
   const attackerFrom = getFighterPosition(motions, attackerId, timeMs);
   const defenderFrom = getFighterPosition(motions, defenderId, timeMs);
+
+  if (actionType === "javelin") {
+    motions.set(attackerId, {
+      from: clonePoint(attackerFrom),
+      to: clonePoint(attackerFrom),
+      startMs: timeMs,
+      endMs: timeMs,
+    });
+
+    return {
+      attackerFrom,
+      defenderFrom,
+      attackerTo: attackerFrom,
+      defenderTo: defenderFrom,
+      durationMs: 0,
+      attackerDurationMs: 0,
+      defenderDurationMs: 0,
+      rush: false,
+      defenderRush: false,
+      distance: getDistance(attackerFrom, defenderFrom),
+    };
+  }
+
   const attacker = getRuntime(fighters, attackerId);
   const plannedAttackerTo =
     actionType === "move" || actionType === "recover"
@@ -624,13 +649,11 @@ function createMovement(
   const maxDuration =
     actionType === "net"
       ? 2_450
-      : actionType === "javelin"
-        ? 2_250
-        : actionType === "recover"
-          ? 1_850
-          : rush
-            ? 1_650
-            : 2_050;
+      : actionType === "recover"
+        ? 1_850
+        : rush
+          ? 1_650
+          : 2_050;
   const attackerDurationMs = Math.round(clamp(attackerDuration, 0, maxDuration));
 
   motions.set(attackerId, {
@@ -685,7 +708,7 @@ function createRuntime(gladiator: GladiatorClass): BattleFighterRuntime {
   return {
     id: gladiator.id,
     name: gladiator.name,
-    maxHp: Math.round(gladiator.stats.hp * randomBetween(1.04, 1.28)),
+    maxHp: gladiator.stats.hp,
     maxEnergy: Math.round(72 + endurance * 0.72 + speed * 0.12),
     recoveryRate: 7.5 + endurance / 18,
     attack: gladiator.stats.attack * randomBetween(0.9, 1.18) * focus,
@@ -1029,32 +1052,6 @@ function shouldUseNet(
     0.04,
     0.58,
   );
-
-  return Math.random() < chance;
-}
-
-function shouldUseJavelin(
-  tactic: BattleTactic,
-  energyState: FighterEnergyState,
-  attacker: BattleFighterRuntime,
-  distance: number,
-  reach: AttackReach,
-): boolean {
-  const energyRatio = clamp(energyState.energy / energyState.maxEnergy, 0, 1);
-
-  if (energyRatio < 0.28) {
-    return false;
-  }
-
-  const normalized = normalizeReach(reach);
-  const idealRange = clamp(
-    1 - Math.abs(distance - normalized.preferred) / Math.max(normalized.max - normalized.min, MIN_REACH_WIDTH),
-    0,
-    1,
-  );
-  const tacticBonus = tactic === "counter" ? 0.16 : tactic === "balanced" ? 0.08 : tactic === "recover" ? -0.22 : -0.02;
-  const focusBonus = clamp((attacker.focus - 0.86) * 0.18, -0.04, 0.08);
-  const chance = clamp(0.18 + idealRange * 0.24 + tacticBonus + focusBonus + (energyRatio - 0.5) * 0.12, 0.08, 0.68);
 
   return Math.random() < chance;
 }
@@ -1606,17 +1603,178 @@ function createActions(
     }
   };
 
-  const chooseTargetId = (brain: FighterBrain, timeMs: number): string | null => {
+  const getBrain = (fighterId: string): FighterBrain | undefined =>
+    brains.find((candidate) => candidate.id === fighterId);
+
+  const getEnemyCandidateIds = (brain: FighterBrain): string[] => {
     const ownTeam = teams[brain.id];
-    const candidates = fighterIds.filter(
+
+    return fighterIds.filter(
       (fighterId) =>
         fighterId !== brain.id &&
         !isDefeated(fighterId) &&
         teams[fighterId] !== ownTeam,
     );
+  };
+
+  const hasReadyJavelin = (brain: FighterBrain): boolean =>
+    isVelesGladiator(brain.gladiator) &&
+    Boolean(getJavelinAttack(brain.gladiator)) &&
+    brain.javelinsLeft > 0;
+
+  const getNearestDangerousEnemyId = (
+    brain: FighterBrain,
+    candidates: readonly string[],
+    timeMs: number,
+  ): string | null => {
+    const ownPosition = getFighterPosition(motions, brain.id, timeMs);
+    let bestTargetId: string | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const candidateId of candidates) {
+      const candidateBrain = getBrain(candidateId);
+      if (!candidateBrain) {
+        continue;
+      }
+
+      const distance = getDistance(
+        ownPosition,
+        getFighterPosition(motions, candidateId, timeMs),
+      );
+
+      if (isEnemyDangerouslyClose(distance, candidateBrain.gladiator) && distance < bestDistance) {
+        bestTargetId = candidateId;
+        bestDistance = distance;
+      }
+    }
+
+    return bestTargetId;
+  };
+
+  const isEnemyPinnedByAlly = (
+    enemyId: string,
+    spotterId: string,
+    timeMs: number,
+  ): boolean => {
+    const ownTeam = teams[spotterId];
+    const enemyBrain = getBrain(enemyId);
+    const enemyPosition = getFighterPosition(motions, enemyId, timeMs);
+
+    if (
+      enemyBrain?.targetId &&
+      enemyBrain.targetId !== spotterId &&
+      teams[enemyBrain.targetId] === ownTeam &&
+      !isDefeated(enemyBrain.targetId)
+    ) {
+      return true;
+    }
+
+    return fighterIds.some((allyId) => {
+      if (
+        allyId === spotterId ||
+        allyId === enemyId ||
+        teams[allyId] !== ownTeam ||
+        isDefeated(allyId)
+      ) {
+        return false;
+      }
+
+      const allyBrain = getBrain(allyId);
+      const allyPosition = getFighterPosition(motions, allyId, timeMs);
+      const allyReach = allyBrain ? normalizeReach(getCloseCombatReach(allyBrain.gladiator)).max : 0;
+      const distance = getDistance(allyPosition, enemyPosition);
+      const closeEnoughToHold =
+        distance <= Math.max(allyReach + metersToArenaDistance(0.28), metersToArenaDistance(0.48));
+
+      return closeEnoughToHold || (allyBrain?.targetId === enemyId && distance <= metersToArenaDistance(1.15));
+    });
+  };
+
+  const chooseVelesJavelinTargetId = (
+    brain: FighterBrain,
+    candidates: readonly string[],
+    timeMs: number,
+  ): string | null => {
+    const ownPosition = getFighterPosition(motions, brain.id, timeMs);
+    let bestTargetId = candidates[0] ?? null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (const candidateId of candidates) {
+      const targetPosition = getFighterPosition(motions, candidateId, timeMs);
+      const lateralGap = Math.abs(targetPosition.y - ownPosition.y);
+      const aligned = lateralGap <= JAVELIN_ALIGNMENT_DISTANCE;
+      const distance = getDistance(ownPosition, targetPosition);
+      const trap = traps.get(candidateId);
+      const ownTrapBonus =
+        trap && trap.trapperId === brain.id && isTrapped(candidateId, timeMs) ? -0.28 : 0;
+      const pinnedBonus = isEnemyPinnedByAlly(candidateId, brain.id, timeMs) ? -0.08 : 0;
+      const alignmentBonus = aligned ? -0.22 : 0;
+      const score =
+        distance +
+        lateralGap * 0.72 +
+        alignmentBonus +
+        ownTrapBonus +
+        pinnedBonus +
+        randomBetween(-0.018, 0.018);
+
+      if (score < bestScore) {
+        bestTargetId = candidateId;
+        bestScore = score;
+      }
+    }
+
+    return bestTargetId;
+  };
+
+  const shouldRepositionForJavelin = (
+    brain: FighterBrain,
+    targetId: string,
+    timeMs: number,
+  ): boolean => {
+    if (!hasReadyJavelin(brain)) {
+      return false;
+    }
+
+    const targetBrain = getBrain(targetId);
+    if (!targetBrain) {
+      return false;
+    }
+
+    const ownPosition = getFighterPosition(motions, brain.id, timeMs);
+    const targetPosition = getFighterPosition(motions, targetId, timeMs);
+    const distance = getDistance(ownPosition, targetPosition);
+
+    if (isEnemyDangerouslyClose(distance, targetBrain.gladiator)) {
+      return false;
+    }
+
+    if (distance >= JAVELIN_SAFE_DISTANCE) {
+      return false;
+    }
+
+    const ownState = getEnergyState(energyStates, brain.id);
+    const energyRatio = clamp(ownState.energy / ownState.maxEnergy, 0, 1);
+
+    return energyRatio > 0.3 && isEnemyPinnedByAlly(targetId, brain.id, timeMs);
+  };
+
+  const chooseTargetId = (brain: FighterBrain, timeMs: number): string | null => {
+    const candidates = getEnemyCandidateIds(brain);
 
     if (candidates.length === 0) {
       return null;
+    }
+
+    if (hasReadyJavelin(brain)) {
+      const dangerousTargetId = getNearestDangerousEnemyId(brain, candidates, timeMs);
+      if (dangerousTargetId) {
+        return dangerousTargetId;
+      }
+
+      const javelinTargetId = chooseVelesJavelinTargetId(brain, candidates, timeMs);
+      if (javelinTargetId) {
+        return javelinTargetId;
+      }
     }
 
     if (brain.targetId && candidates.includes(brain.targetId) && Math.random() > 0.22) {
@@ -1733,13 +1891,7 @@ function createActions(
     if (
       javelinReady &&
       javelinAttack &&
-      !brain.usingShortSword &&
-      canCloseToReach(
-        distance,
-        javelinAttack.reach,
-        getSteadyStepDistance(fighter, "javelin", false),
-      ) &&
-      shouldUseJavelin(brain.tactic, ownState, fighter, distance, javelinAttack.reach)
+      !brain.usingShortSword
     ) {
       return true;
     }
@@ -2043,6 +2195,11 @@ function createActions(
 
     if (shouldSpendTurnRecovering(brain, fighter, timeMs)) {
       planBrainMovement(brain, targetId, timeMs, "recover");
+      continue;
+    }
+
+    if (shouldRepositionForJavelin(brain, targetId, timeMs)) {
+      planBrainMovement(brain, targetId, timeMs, "move");
       continue;
     }
 

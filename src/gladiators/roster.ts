@@ -44,6 +44,7 @@ export interface RuntimeGladiator extends GladiatorClass {
   teamId: TeamId;
   displayName: string;
   instanceId: string;
+  level: number;
 }
 
 const fighterNamePool = [
@@ -246,6 +247,7 @@ export function buildRuntimeGladiator(
     teamId: slot.teamId,
     displayName: slot.displayName,
     instanceId: slot.instanceId,
+    level: slot.level,
   };
 }
 

@@ -95,9 +95,9 @@ export const veles: GladiatorClass = {
       name: "Кидок списа",
       cssClass: "attack-javelin-throw",
       reach: {
-        min: metersToArenaDistance(1.85),
-        preferred: metersToArenaDistance(2.75),
-        max: metersToArenaDistance(2.75),
+        min: 0,
+        preferred: metersToArenaDistance(6),
+        max: 2,
       },
     },
     {

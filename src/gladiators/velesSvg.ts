@@ -149,13 +149,13 @@ export function createVelesSvg(): string {
         <path d="M186 136 Q194 132 202 140 L199 152 Q188 154 184 144 Z" fill="url(#v-skin)"/>
         <path d="M188 143 L197 145" stroke="#5d3617" stroke-width="1" fill="none" opacity="0.6"/>
 
-        <g data-bone="javelin" data-javelin-hand="true" transform="rotate(-17 191 150)">
-          <rect x="188" y="44" width="5.2" height="226" rx="2.6" fill="url(#v-wood)"/>
-          <path d="M190.5 45 L190.5 266" stroke="#c49258" stroke-width="1" opacity="0.55"/>
-          <path d="M185 42 L196 42 L191 10 Z" fill="url(#v-steel)"/>
-          <path d="M190 16 L190 41" stroke="#f1f1e8" stroke-width="0.85" opacity="0.75"/>
-          <path d="M186 267 L196 267 L194 278 L188 278 Z" fill="url(#v-bronze)"/>
-          <path d="M186 263 L196 263" stroke="#5b3909" stroke-width="0.9"/>
+        <g data-bone="javelin" data-javelin-hand="true" transform="rotate(-7 211 150)">
+          <rect x="208" y="44" width="5.2" height="226" rx="2.6" fill="url(#v-wood)"/>
+          <path d="M210.5 45 L210.5 266" stroke="#c49258" stroke-width="1" opacity="0.55"/>
+          <path d="M205 42 L216 42 L211 10 Z" fill="url(#v-steel)"/>
+          <path d="M210 16 L210 41" stroke="#f1f1e8" stroke-width="0.85" opacity="0.75"/>
+          <path d="M206 267 L216 267 L214 278 L208 278 Z" fill="url(#v-bronze)"/>
+          <path d="M206 263 L216 263" stroke="#5b3909" stroke-width="0.9"/>
         </g>
       </g>
     </g>
@@ -185,7 +185,7 @@ export const velesBones: BoneDef[] = [
   { name: "forearm-l", px: 94, py: 176 },
   { name: "arm-r", px: 158, py: 154 },
   { name: "forearm-r", px: 178, py: 176 },
-  { name: "javelin", px: 190, py: 150 },
+  { name: "javelin", px: 211, py: 150 },
   { name: "head", px: 138, py: 142 },
 ];
 
@@ -277,35 +277,46 @@ export const velesJavelinThrow: AnimationClip = {
       },
     },
     {
-      t: 0.22,
+      t: 0.2,
       bones: {
-        root: { tx: 2, ty: -2 },
-        torso: { r: 7 },
-        "arm-r": { r: 22 },
-        "forearm-r": { r: 32 },
-        javelin: { r: 10, tx: 4, ty: -8 },
+        root: { tx: 2, ty: -3 },
+        torso: { r: 8 },
+        "arm-r": { r: -28 },
+        "forearm-r": { r: -38 },
+        javelin: { r: -5, tx: -3, ty: -18 },
         head: { r: 4, tx: 1 },
       },
     },
     {
-      t: 0.5,
+      t: 0.38,
       bones: {
-        root: { tx: -10, ty: 2 },
-        torso: { r: -13 },
-        "arm-r": { r: -38 },
-        "forearm-r": { r: -28 },
-        javelin: { tx: 42, ty: -11, r: -9 },
+        root: { tx: 4, ty: -5 },
+        torso: { r: 11 },
+        "arm-r": { r: -48 },
+        "forearm-r": { r: -62 },
+        javelin: { tx: -5, ty: -34, r: -10 },
+        head: { r: 5, tx: 2, ty: -1 },
+      },
+    },
+    {
+      t: 0.56,
+      bones: {
+        root: { tx: -8, ty: 0 },
+        torso: { r: -14 },
+        "arm-r": { r: 20 },
+        "forearm-r": { r: -18 },
+        javelin: { tx: 24, ty: -44, r: -2 },
         head: { r: -6, tx: -3 },
       },
     },
     {
-      t: 0.74,
+      t: 0.76,
       bones: {
         root: { tx: -5, ty: 2 },
         torso: { r: -6 },
-        "arm-r": { r: -16 },
-        "forearm-r": { r: -12 },
-        javelin: { tx: 70, ty: -6, r: -5 },
+        "arm-r": { r: 8 },
+        "forearm-r": { r: -8 },
+        javelin: { tx: 38, ty: -36, r: 0 },
         head: { r: -2 },
       },
     },
