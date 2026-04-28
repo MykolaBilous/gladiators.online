@@ -78,6 +78,7 @@
 .battle-stage-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
   gap: 12px;
 }
@@ -246,8 +247,54 @@
   width: min(100%, 220px);
 }
 
+.battle-seed-control {
+  width: min(100%, 260px);
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid rgba(238, 243, 249, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(238, 243, 249, 0.58);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.battle-seed-input {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid rgba(240, 192, 64, 0.24);
+  border-radius: 6px;
+  background: rgba(8, 10, 14, 0.42);
+  color: #fff3c4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: none;
+  padding: 0 9px;
+  outline: none;
+}
+
+.battle-seed-input:focus {
+  border-color: rgba(240, 192, 64, 0.58);
+  box-shadow: 0 0 0 2px rgba(240, 192, 64, 0.12);
+}
+
+.battle-seed-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .battle-results-button--stage {
   width: min(100%, 220px);
+}
+
+.battle-preserve-button--stage {
+  width: min(100%, 280px);
 }
 
 .battle-results-button {
@@ -1564,7 +1611,7 @@
   left: 50%;
   top: 50%;
   z-index: 116;
-  width: min(90%, 520px);
+  width: min(90%, 620px);
   padding: 18px;
   border: 1px solid rgba(240, 192, 64, 0.42);
   border-radius: 8px;
@@ -2579,6 +2626,10 @@
     grid-template-columns: 1fr;
   }
 
+  .training-body--auto .training-grid {
+    grid-template-columns: 1fr;
+  }
+
   .battle-button {
     width: 100%;
   }
@@ -2586,6 +2637,10 @@
   .battle-stage-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .battle-seed-control {
+    width: 100%;
   }
 
   .battle-results-button {

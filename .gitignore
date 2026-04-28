@@ -11,3 +11,4 @@ pnpm-debug.log*
 *.local
 *.tsbuildinfo
 .vite-dev*.log
+battle-seeds/*.jsonl

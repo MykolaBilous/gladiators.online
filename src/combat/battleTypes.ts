@@ -88,6 +88,7 @@ export interface BattleEvent {
 
 export interface BattlePlan {
   id: string;
+  seed: string;
   durationMs: number;
   winnerId: string;
   loserId: string;

@@ -20,15 +20,6 @@ export const POINTS_PER_GLADIATOR_LEVEL = 3;
 export const MIN_GLADIATOR_LEVEL = 0;
 export const MAX_GLADIATOR_LEVEL = 20;
 
-const statBaseValues: GladiatorStats = {
-  hp: 52,
-  attack: 30,
-  defense: 28,
-  speed: 28,
-  dexterity: 30,
-  endurance: 34,
-};
-
 export function createEmptyStatPoints(): GladiatorStatPoints {
   return {
     hp: 0,
@@ -151,7 +142,7 @@ export function deriveGladiatorStats(
   const stats = {} as GladiatorStats;
 
   for (const key of gladiatorStatKeys) {
-    stats[key] = Math.round(statBaseValues[key] + points[key] * gladiator.statMultipliers[key]);
+    stats[key] = Math.round(gladiator.stats[key] + points[key] * gladiator.statMultipliers[key]);
   }
 
   return stats;

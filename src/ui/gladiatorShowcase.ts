@@ -1,1268 +1,84 @@
 import { Skeleton2D } from "../animation/Skeleton2D";
-import type { AnimationClip, BoneDef } from "../animation/skeletonTypes";
-import { createBattlePlan } from "../combat/battleSimulator";
-import { metersToArenaDistance } from "../config/arenaScale";
 import type {
-  BattleCounterAttack,
-  BattleEvent,
+  BattleReplayRecord,
+  BattleReplaySetup,
+} from "../combat/battleReplayTypes";
+import type {
   BattlePlan,
   BattlePoint,
-  BattleTeamId,
 } from "../combat/battleTypes";
 import { gladiatorClasses } from "../gladiators/gladiatorClasses";
 import {
-  clampGladiatorLevel,
   getBonusPointsForLevel,
-  getTotalPointsForLevel,
-  gladiatorStatKeys,
-  LEVEL_ZERO_STAT_POINTS,
-  MAX_GLADIATOR_LEVEL,
-  POINTS_PER_GLADIATOR_LEVEL,
   sumStatPoints,
 } from "../gladiators/gladiatorProgression";
-import type {
-  GladiatorClass,
-  GladiatorStatKey,
-} from "../gladiators/gladiatorTypes";
 import {
   buildRuntimeGladiators,
-  buildTeamMap,
   createAutoRoster,
   createManualDefaultRoster,
   getAllSlots,
-  getAllocatedBonusPoints,
-  getGladiatorClass,
-  listGladiatorClasses,
-  MAX_TEAM_SIZE,
-  MIN_TEAM_SIZE,
-  setSlotClass,
-  setTeamSize,
   TEAM_IDS,
-  TEAM_LABELS,
   type Roster,
   type RosterSlot,
   type RuntimeGladiator,
   type TeamId,
   type TrainingMode,
 } from "../gladiators/roster";
+import { createBattleAudioController } from "./showcase/audio";
+import { createArenaCameraController } from "./showcase/arenaCamera";
+import { createBattleArenaUi } from "./showcase/battleArenaUi";
+import { createBattleEventPlayback } from "./showcase/battleEventPlayback";
 import {
-  createMurmilloSvg,
-  murmilloBones,
-  murmilloHeavyDodge,
-  murmilloShieldBlock,
-  murmilloShieldBash,
-  murmilloSwordSlash,
-  murmilloWalk,
-} from "../gladiators/murmilloSvg";
+  createBattleLifecycleController,
+  type BattleLifecycleState,
+} from "./showcase/battleLifecycle";
 import {
-  createRetiariusSvg,
-  retiariusBones,
-  retiariusNetThrow,
-  retiariusQuickDodge,
-  retiariusTridentThrust,
-  retiariusTridentParry,
-  retiariusWalk,
-} from "../gladiators/retiariusSvg";
+  createShowcaseInteractionHandlers,
+  type ShowcaseInteractionState,
+} from "./showcase/interactions";
+import { createShowcaseOverlay } from "./showcase/layout";
+import { createBattleVolumeControls } from "./showcase/volumeControls";
+import { createBattleThrowables } from "./showcase/throwables";
 import {
-  createVelesSvg,
-  velesBones,
-  velesJavelinThrow,
-  velesQuickDodge,
-  velesShortSwordBlock,
-  velesShortSwordSlash,
-  velesWalk,
-} from "../gladiators/velesSvg";
-import type {
-  AttackPlayback,
-  BattleResultStats,
-  DefenseOutcome,
-  FloatingVariant,
-} from "./gladiatorShowcaseTypes";
-import applaudingHighUrl from "../assets/sounds/Applauding high.wav?url";
-import applaudingLowUrl from "../assets/sounds/Applauding low.wav?url";
-import applaudingMediumUrl from "../assets/sounds/Applauding medium.wav?url";
-import bloodUrl from "../assets/sounds/character/blood.mp3?url";
-import bloodTwoUrl from "../assets/sounds/character/blood two.mp3?url";
-import murmilonBlockUrl from "../assets/sounds/character/murmilon block.mp3?url";
-import murmilonHitUrl from "../assets/sounds/character/murmilon hit.mp3?url";
-import retiariusBlockUrl from "../assets/sounds/character/retiarius block.mp3?url";
-import retiariusHitUrl from "../assets/sounds/character/retiarius hit.mp3?url";
-import coliseumUrl from "../assets/sounds/coliseum.mp3?url";
+  formatDuration,
+  getArenaRenderMetrics,
+} from "./showcase/playback";
+import {
+  boneMap,
+  createArenaFighter,
+  createTeamPanel,
+} from "./showcase/renderer";
+import {
+  clearBattleFinale as clearBattleFinaleElements,
+  getPlanFighter,
+  rememberFighterName,
+} from "./showcase/resultUi";
+import {
+  cloneRoster,
+  createAutoTrainingCard,
+  createManualSlotEditor,
+  createManualTeamBlock,
+  createTypeCard,
+} from "./showcase/training";
+import {
+  SPAWN_GRID_CENTER_COLUMN,
+  SPAWN_GRID_CENTER_ROW,
+  cloneBattlePoints,
+  cloneManualSpawnPlacements,
+  createManualPlacementPanel,
+  createSpawnPositions,
+  getSpawnCellPoint,
+  getTeamSpawnCellKey,
+  isSameSpawnCell,
+  isValidSpawnCell,
+  type ManualSpawnPlacements,
+  type SpawnGridCell,
+  type TeamSpawnSeeds,
+} from "./showcase/placement";
 import "./gladiatorShowcase.css";
 
-const ACTION_MOTION_SCALE = 1.3;
-const DEFENSE_MOTION_SCALE = 1.24;
-const WALK_MOTION_SCALE = 1.18;
-const ATTACK_TRANSFORM_MS = 380;
-const NET_FLIGHT_MS = 820;
-const NET_DROP_MS = 520;
-const JAVELIN_FLIGHT_MS = 1_000;
-const JAVELIN_EXIT_MS = 460;
-const JAVELIN_DROP_MS = 440;
-const JAVELIN_RELEASE_MIN_FRACTION = 0.18;
-const JAVELIN_RELEASE_MAX_FRACTION = 0.46;
-const VELES_STARTING_JAVELINS = 3;
-const REACTION_SETTLE_MS = 320;
-const BATTLE_VOLUME_STORAGE_KEY = "gladiators.masterVolume";
-const DEFAULT_BATTLE_VOLUME = 1;
-const DEFAULT_RESTORED_BATTLE_VOLUME = 0.72;
-const SAVE_BATTLE_SETUP_LABEL = "Зберегти налаштування на наступний бій";
-
-type CrowdApplauseLevel = "low" | "medium" | "high";
-
-interface BattleAudioController {
-  startBattle: () => void;
-  playAttack: (attackCssClass: string) => void;
-  playApplause: (level: CrowdApplauseLevel) => Promise<void>;
-  playBlock: (fighterId: string) => void;
-  playBlood: () => void;
-  playFinaleAndStop: () => void;
-  setMasterVolume: (volume: number) => void;
-  setMuted: (muted: boolean) => void;
-  getMasterVolume: () => number;
-  isMuted: () => boolean;
-  stopAll: () => void;
-}
-
-const applauseSoundUrls: Record<CrowdApplauseLevel, string> = {
-  low: applaudingLowUrl,
-  medium: applaudingMediumUrl,
-  high: applaudingHighUrl,
-};
-
-const applauseVolumes: Record<CrowdApplauseLevel, number> = {
-  low: 0.58,
-  medium: 0.7,
-  high: 0.84,
-};
-
-const attackSoundUrls: Record<string, string> = {
-  "attack-sword-slash": murmilonHitUrl,
-  "attack-shield-bash": retiariusHitUrl,
-  "attack-trident-thrust": retiariusHitUrl,
-  "attack-net-throw": retiariusHitUrl,
-  "attack-javelin-throw": retiariusHitUrl,
-  "attack-veles-sword": retiariusHitUrl,
-};
-
-const blockSoundUrls: Record<string, string> = {
-  murmillo: murmilonBlockUrl,
-  retiarius: retiariusBlockUrl,
-  veles: retiariusBlockUrl,
-};
-
-const bloodSoundUrls = [bloodUrl, bloodTwoUrl] as const;
-
-function scaleClip(clip: AnimationClip, scale: number): AnimationClip {
-  return {
-    ...clip,
-    duration: Math.round(clip.duration * scale),
-  };
-}
-
-const svgMap: Record<string, () => string> = {
-  murmillo: createMurmilloSvg,
-  retiarius: createRetiariusSvg,
-  veles: createVelesSvg,
-};
-
-const boneMap: Record<string, BoneDef[]> = {
-  murmillo: murmilloBones,
-  retiarius: retiariusBones,
-  veles: velesBones,
-};
-
-const clipMap: Record<string, AnimationClip> = {
-  "attack-sword-slash": scaleClip(murmilloSwordSlash, ACTION_MOTION_SCALE),
-  "attack-shield-bash": scaleClip(murmilloShieldBash, ACTION_MOTION_SCALE),
-  "attack-trident-thrust": scaleClip(retiariusTridentThrust, ACTION_MOTION_SCALE),
-  "attack-net-throw": scaleClip(retiariusNetThrow, ACTION_MOTION_SCALE),
-  "attack-javelin-throw": scaleClip(velesJavelinThrow, ACTION_MOTION_SCALE),
-  "attack-veles-sword": scaleClip(velesShortSwordSlash, ACTION_MOTION_SCALE),
-};
-
-const walkClipMap: Record<string, AnimationClip> = {
-  murmillo: scaleClip(murmilloWalk, WALK_MOTION_SCALE),
-  retiarius: scaleClip(retiariusWalk, WALK_MOTION_SCALE),
-  veles: scaleClip(velesWalk, WALK_MOTION_SCALE),
-};
-
-const defenseClipMap: Record<string, Record<DefenseOutcome, AnimationClip>> = {
-  murmillo: {
-    block: scaleClip(murmilloShieldBlock, DEFENSE_MOTION_SCALE),
-    miss: scaleClip(murmilloHeavyDodge, DEFENSE_MOTION_SCALE),
-  },
-  retiarius: {
-    block: scaleClip(retiariusTridentParry, DEFENSE_MOTION_SCALE),
-    miss: scaleClip(retiariusQuickDodge, DEFENSE_MOTION_SCALE),
-  },
-  veles: {
-    block: scaleClip(velesShortSwordBlock, DEFENSE_MOTION_SCALE),
-    miss: scaleClip(velesQuickDodge, DEFENSE_MOTION_SCALE),
-  },
-};
-
-const statLabels: Record<string, string> = {
-  hp: "HP",
-  attack: "АТК",
-  defense: "ЗАХ",
-  speed: "ШВД",
-  dexterity: "СПР",
-  endurance: "ВТР",
-};
-
-const statDisplayMaximums: Record<GladiatorStatKey, number> = {
-  hp: 180,
-  attack: 150,
-  defense: 150,
-  speed: 150,
-  dexterity: 150,
-  endurance: 150,
-};
-
-const UI_MIN_MOVEMENT_DISTANCE = metersToArenaDistance(0.06);
-const CAMERA_SIDE_GUTTER_PX = 34;
-const CAMERA_VERTICAL_GUTTER = 0.12;
-const CAMERA_MIN_ZOOM = 0.76;
-const CAMERA_MAX_ZOOM = 1.15;
-const CAMERA_CLOSE_FREEZE_SPAN = 0.3;
-const CAMERA_FIT_TOLERANCE = 0.012;
-const CAMERA_POSITION_SMOOTHING_MS = 360;
-const CAMERA_ZOOM_SMOOTHING_MS = 520;
-const CAMERA_SETTLE_EPSILON_PX = 0.35;
-const CAMERA_SETTLE_EPSILON_ZOOM = 0.0012;
-
-const MIN_TRAINING_LEVEL = 0;
-const SPAWN_GRID_COLUMNS = 3;
-const SPAWN_GRID_ROWS = 5;
-const SPAWN_GRID_COLUMN_INDICES = [0, 1, 2] as const;
-const SPAWN_GRID_ROW_INDICES = [0, 1, 2, 3, 4] as const;
-const SPAWN_GRID_CENTER_COLUMN = (SPAWN_GRID_COLUMNS - 1) / 2;
-const SPAWN_GRID_CENTER_ROW = (SPAWN_GRID_ROWS - 1) / 2;
-const SPAWN_GRID_ROW_Y = [0.9, 0.74, 0.58, 0.42, 0.26] as const;
-const SPAWN_GRID_X: Record<TeamId, readonly [number, number, number]> = {
-  left: [0.1, 0.24, 0.38],
-  right: [0.9, 0.76, 0.62],
-};
-const gladiatorClassNameCollator = new Intl.Collator("uk", { sensitivity: "base" });
-
-interface SpawnGridCell {
-  column: number;
-  row: number;
-}
-
-type ManualSpawnPlacements = Partial<Record<string, SpawnGridCell>>;
-type TeamSpawnSeeds = Record<TeamId, number>;
-
-interface ArenaCameraState {
-  x: number;
-  y: number;
-  zoom: number;
-}
-
-interface ArenaCameraBounds {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-}
-
-function isValidSpawnCell(cell: SpawnGridCell | undefined): cell is SpawnGridCell {
-  return (
-    Boolean(cell) &&
-    Number.isInteger(cell?.column) &&
-    Number.isInteger(cell?.row) &&
-    cell!.column >= 0 &&
-    cell!.column < SPAWN_GRID_COLUMNS &&
-    cell!.row >= 0 &&
-    cell!.row < SPAWN_GRID_ROWS
-  );
-}
-
-function isSameSpawnCell(
-  left: SpawnGridCell | undefined,
-  right: SpawnGridCell | undefined,
-): boolean {
-  return Boolean(
-    left &&
-      right &&
-      left.column === right.column &&
-      left.row === right.row,
-  );
-}
-
-function getSpawnCellKey(cell: SpawnGridCell): string {
-  return `${cell.column}:${cell.row}`;
-}
-
-function getTeamSpawnCellKey(teamId: TeamId, cell: SpawnGridCell): string {
-  return `${teamId}:${getSpawnCellKey(cell)}`;
-}
-
-function getAllSpawnGridCells(): SpawnGridCell[] {
-  return SPAWN_GRID_ROW_INDICES.flatMap((row) =>
-    SPAWN_GRID_COLUMN_INDICES.map((column) => ({ column, row })),
-  );
-}
-
-function getSpawnCellPoint(teamId: TeamId, cell: SpawnGridCell): BattlePoint {
-  return {
-    x: SPAWN_GRID_X[teamId][cell.column] ?? SPAWN_GRID_X[teamId][1],
-    y: SPAWN_GRID_ROW_Y[cell.row] ?? SPAWN_GRID_ROW_Y[2],
-  };
-}
-
-function getSpawnCellNoise(seed: number, cell: SpawnGridCell): number {
-  const raw = Math.sin(seed * 9_973 + cell.column * 193 + cell.row * 769) * 10_000;
-
-  return raw - Math.floor(raw);
-}
-
-function pickCenteredSpawnCells(
-  count: number,
-  blockedCellKeys: ReadonlySet<string> = new Set(),
-  seed = 0,
-): SpawnGridCell[] {
-  return getAllSpawnGridCells()
-    .filter((cell) => !blockedCellKeys.has(getSpawnCellKey(cell)))
-    .map((cell) => ({
-      cell,
-      score:
-        Math.hypot(
-          cell.column - SPAWN_GRID_CENTER_COLUMN,
-          (cell.row - SPAWN_GRID_CENTER_ROW) * 0.82,
-        ) + getSpawnCellNoise(seed, cell) * 0.28,
-    }))
-    .sort((left, right) => left.score - right.score)
-    .slice(0, Math.max(0, count))
-    .map((item) => item.cell);
-}
-
-function createSpawnPositionsForTeam(
-  teamId: TeamId,
-  members: readonly RuntimeGladiator[],
-  manualPlacements?: ManualSpawnPlacements,
-  seed = 0,
-): Record<string, BattlePoint> {
-  const positions: Record<string, BattlePoint> = {};
-  const blockedCellKeys = new Set<string>();
-  const unplaced: RuntimeGladiator[] = [];
-
-  for (const fighter of members) {
-    const placement = manualPlacements?.[fighter.instanceId];
-    const cellKey = placement ? getSpawnCellKey(placement) : "";
-
-    if (
-      manualPlacements &&
-      isValidSpawnCell(placement) &&
-      !blockedCellKeys.has(cellKey)
-    ) {
-      positions[fighter.id] = getSpawnCellPoint(teamId, placement);
-      blockedCellKeys.add(cellKey);
-    } else {
-      unplaced.push(fighter);
-    }
-  }
-
-  const centeredCells = pickCenteredSpawnCells(unplaced.length, blockedCellKeys, seed);
-  unplaced.forEach((fighter, index) => {
-    const cell = centeredCells[index] ?? { column: SPAWN_GRID_CENTER_COLUMN, row: SPAWN_GRID_CENTER_ROW };
-    positions[fighter.id] = getSpawnCellPoint(teamId, cell);
-  });
-
-  return positions;
-}
-
-function createSpawnPositions(
-  fighters: readonly RuntimeGladiator[],
-  manualPlacements?: ManualSpawnPlacements,
-  teamSeeds?: TeamSpawnSeeds,
-): Record<string, BattlePoint> {
-  const positions: Record<string, BattlePoint> = {};
-
-  for (const teamId of TEAM_IDS) {
-    Object.assign(
-      positions,
-      createSpawnPositionsForTeam(
-        teamId,
-        fighters.filter((fighter) => fighter.teamId === teamId),
-        manualPlacements,
-        teamSeeds?.[teamId] ?? 0,
-      ),
-    );
-  }
-
-  return positions;
-}
-
-function clampManualBonusPoints(slot: RosterSlot): void {
-  const budget = getBonusPointsForLevel(slot.level);
-  let overflow = sumStatPoints(slot.manualBonusPoints) - budget;
-
-  if (overflow <= 0) {
-    return;
-  }
-
-  for (const key of [...gladiatorStatKeys].reverse()) {
-    if (overflow <= 0) {
-      break;
-    }
-
-    const removed = Math.min(slot.manualBonusPoints[key], overflow);
-    slot.manualBonusPoints[key] -= removed;
-    overflow -= removed;
-  }
-}
-
-function getStatDisplayPercent(key: GladiatorStatKey, value: number): number {
-  return clampPercent((value / statDisplayMaximums[key]) * 100);
-}
-
-function formatMultiplier(value: number): string {
-  return `x${value.toFixed(1).replace(/\.0$/, "")}`;
-}
-
-function isGladiatorStatKey(value: string | undefined): value is GladiatorStatKey {
-  return typeof value === "string" && (gladiatorStatKeys as readonly string[]).includes(value);
-}
-
-function clampPercent(value: number): number {
-  return Math.min(Math.max(value, 0), 100);
-}
-
-function clampMasterVolume(value: number): number {
-  return Math.min(Math.max(value, 0), 1);
-}
-
-function getStoredBattleVolume(): number {
-  try {
-    const storedVolume = window.localStorage.getItem(BATTLE_VOLUME_STORAGE_KEY);
-    if (!storedVolume) {
-      return DEFAULT_BATTLE_VOLUME;
-    }
-
-    const parsedVolume = Number.parseFloat(storedVolume);
-    return Number.isFinite(parsedVolume)
-      ? clampMasterVolume(parsedVolume)
-      : DEFAULT_BATTLE_VOLUME;
-  } catch {
-    return DEFAULT_BATTLE_VOLUME;
-  }
-}
-
-function storeBattleVolume(volume: number): void {
-  try {
-    window.localStorage.setItem(BATTLE_VOLUME_STORAGE_KEY, String(clampMasterVolume(volume)));
-  } catch {
-    // localStorage can be unavailable in private or embedded browsing contexts.
-  }
-}
-
-function formatDuration(durationMs: number): string {
-  return `${(durationMs / 1_000).toFixed(1)} с`;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function getPointDistance(a: BattlePoint, b: BattlePoint): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function getArenaRenderMetrics(point: BattlePoint): {
-  x: number;
-  bottom: number;
-  scale: number;
-  z: number;
-} {
-  return {
-    x: lerp(5, 95, point.x),
-    bottom: lerp(48, 5, point.y),
-    scale: lerp(0.58, 1.2, point.y),
-    z: Math.round(20 + point.y * 60),
-  };
-}
-
-function createTypeStatBar(key: GladiatorStatKey, value: number): string {
-  return `
-    <div class="stat-row stat-row--type">
-      <span class="stat-label">${statLabels[key] ?? key}</span>
-      <div class="stat-bar-bg">
-        <div class="stat-bar-fill" data-stat="${key}" style="width:${getStatDisplayPercent(
-          key,
-          value,
-        )}%"></div>
-      </div>
-      <span class="stat-value">${value}</span>
-    </div>`;
-}
-
-function createTeamFighterRow(fighter: RuntimeGladiator): string {
-  return `
-    <div class="team-fighter-row" data-team-fighter="${fighter.id}" data-class="${fighter.classId}">
-      <div class="team-fighter-head">
-        <strong class="team-fighter-name">${fighter.displayName}</strong>
-        <span class="team-fighter-class">${fighter.name}</span>
-      </div>
-      <div class="team-fighter-health">
-        <div class="team-fighter-health-line">
-          <span class="team-fighter-health-text" data-health-text="${fighter.id}">${fighter.stats.hp} / ${fighter.stats.hp} HP</span>
-          <span class="team-fighter-health-percent" data-health-percent="${fighter.id}">100%</span>
-        </div>
-        <div class="battle-health battle-health-panel">
-          <div class="battle-health-fill" data-health-fill="${fighter.id}" style="width:100%"></div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function createTeamPanel(teamId: TeamId, fighters: readonly RuntimeGladiator[]): string {
-  const sideLabel = TEAM_LABELS[teamId];
-  const rows = fighters.map(createTeamFighterRow).join("");
-  const countSuffix =
-    fighters.length === 1 ? "боєць" : fighters.length < 5 ? "бійці" : "бійців";
-
-  return `
-    <aside class="battle-team-panel" data-team-panel="${teamId}" data-side="${teamId}" aria-label="${sideLabel}">
-      <div class="team-panel-header">
-        <span class="team-label">${sideLabel}</span>
-        <span class="team-count" data-team-count="${teamId}">${fighters.length} ${countSuffix}</span>
-      </div>
-      <div class="team-fighters">${rows}</div>
-    </aside>`;
-}
-
-function createArenaFighter(fighter: RuntimeGladiator): string {
-  const svg = svgMap[fighter.classId]?.() ?? "";
-
-  return `
-    <article class="battle-fighter" data-fighter="${fighter.id}" data-class="${fighter.classId}" data-side="${fighter.teamId}">
-      <div class="fighter-nameplate">
-        <span class="fighter-tag-name">${fighter.displayName} (${fighter.level})</span>
-        <span class="fighter-tag-hp" data-health-compact="${fighter.id}">${fighter.stats.hp} HP</span>
-      </div>
-      <div class="arena-svg" id="arena-svg-${fighter.id}">
-        <div class="arena-svg-mirror">
-          ${svg}
-        </div>
-      </div>
-      <div class="floating-damage" data-float="${fighter.id}"></div>
-    </article>`;
-}
-
-function createTypeCard(gladiator: GladiatorClass): string {
-  const preview = svgMap[gladiator.id]?.() ?? "";
-  const stats = gladiatorStatKeys
-    .map((key) => createTypeStatBar(key, gladiator.stats[key]))
-    .join("");
-  const attacks = gladiator.attacks
-    .map((attack) => `<span class="move-chip">${attack.name}</span>`)
-    .join("");
-
-  return `
-    <article class="gladiator-card gladiator-card--type" data-type-id="${gladiator.id}">
-      <div class="gladiator-type-hero">
-        <div class="gladiator-type-preview" aria-hidden="true">
-          ${preview}
-        </div>
-        <div class="gladiator-type-copy">
-          <h2 class="gladiator-name">${gladiator.name}</h2>
-          <p class="gladiator-role">${gladiator.title}</p>
-          <p class="gladiator-desc">${gladiator.description}</p>
-        </div>
-      </div>
-      <div class="gladiator-equip">
-        <span><span class="equip-icon">Меч</span> ${gladiator.weapon}</span>
-        <span><span class="equip-icon">Захист</span> ${gladiator.defense}</span>
-      </div>
-      <div class="gladiator-stats">${stats}</div>
-      <div class="move-chips">${attacks}</div>
-    </article>`;
-}
-
-function createTrainingStatControl(
-  slot: RosterSlot,
-  klass: GladiatorClass,
-  mode: TrainingMode,
-  key: GladiatorStatKey,
-): string {
-  const statKey = `${slot.instanceId}:${key}`;
-  const bonusPoints = getAllocatedBonusPoints(slot, mode);
-  const totalPoints = slot.levelZeroPoints[key] + bonusPoints[key];
-  const manualDisabled = mode === "auto" ? "disabled" : "";
-
-  return `
-    <div class="training-stat-row" data-training-stat="${statKey}">
-      <span class="training-stat-name">${statLabels[key]}</span>
-      <span class="training-stat-base" data-training-base="${statKey}">${slot.levelZeroPoints[key]}</span>
-      <span class="training-stat-multiplier">${formatMultiplier(klass.statMultipliers[key])}</span>
-      <button class="training-stepper" type="button" data-point-action="decrease" data-gladiator="${slot.instanceId}" data-stat="${key}" ${manualDisabled}>-</button>
-      <strong class="training-stat-bonus" data-training-bonus="${statKey}">+${bonusPoints[key]}</strong>
-      <button class="training-stepper" type="button" data-point-action="increase" data-gladiator="${slot.instanceId}" data-stat="${key}" ${manualDisabled}>+</button>
-      <span class="training-stat-total" data-training-total="${statKey}">${totalPoints}</span>
-    </div>`;
-}
-
-function createTrainingStatGrid(
-  slot: RosterSlot,
-  klass: GladiatorClass,
-  mode: TrainingMode,
-): string {
-  const stats = gladiatorStatKeys
-    .map((key) => createTrainingStatControl(slot, klass, mode, key))
-    .join("");
-
-  return `
-    <div class="training-stat-head">
-      <span>stat</span>
-      <span>0</span>
-      <span>mult</span>
-      <span></span>
-      <span>+lv</span>
-      <span></span>
-      <span>sum</span>
-    </div>
-    <div class="training-stats">${stats}</div>`;
-}
-
-function createSlotBudgetRow(slot: RosterSlot, mode: TrainingMode): string {
-  const bonusBudget = getBonusPointsForLevel(slot.level);
-  const allocated = sumStatPoints(getAllocatedBonusPoints(slot, mode));
-  const remaining = bonusBudget - allocated;
-
-  return `
-    <div class="training-budget">
-      <span data-training-total-budget="${slot.instanceId}">${getTotalPointsForLevel(slot.level)} pts</span>
-      <span data-training-bonus-budget="${slot.instanceId}">+${bonusBudget}</span>
-      <strong data-training-remaining="${slot.instanceId}">${remaining}</strong>
-    </div>`;
-}
-
-function createAutoTrainingCard(slot: RosterSlot): string {
-  const klass = getGladiatorClass(slot.classId);
-
-  return `
-    <section class="training-card" data-training-card="${slot.instanceId}">
-      <div class="training-card-head">
-        <div>
-          <span class="training-side-label">${slot.displayName}</span>
-          <strong>${klass.name}</strong>
-        </div>
-        <label class="training-level-control">
-          <span>Lv</span>
-          <input type="number" min="${MIN_TRAINING_LEVEL}" max="${MAX_GLADIATOR_LEVEL}" value="${slot.level}" data-level-input="${slot.instanceId}" />
-        </label>
-      </div>
-      ${createSlotBudgetRow(slot, "auto")}
-      ${createTrainingStatGrid(slot, klass, "auto")}
-    </section>`;
-}
-
-function getSortedGladiatorClasses(): GladiatorClass[] {
-  return [...listGladiatorClasses()].sort(
-    (left, right) =>
-      gladiatorClassNameCollator.compare(left.name, right.name) ||
-      left.id.localeCompare(right.id),
-  );
-}
-
-function getSlotRemainingState(slot: RosterSlot): {
-  className: string;
-  label: string;
-  remaining: number;
-} {
-  const bonusBudget = getBonusPointsForLevel(slot.level);
-  const remaining = bonusBudget - sumStatPoints(slot.manualBonusPoints);
-  const className = remaining === 0 ? "is-balanced" : remaining > 0 ? "is-pending" : "is-overdrawn";
-  const label = remaining > 0 ? `+${remaining} вільних` : remaining === 0 ? "розподілено" : `${remaining}`;
-
-  return { className, label, remaining };
-}
-
-function createManualClassPicker(slot: RosterSlot, isOpen: boolean): string {
-  const klass = getGladiatorClass(slot.classId);
-  const options = getSortedGladiatorClasses()
-    .map((option) => {
-      const selected = option.id === slot.classId;
-      return `
-        <button
-          class="manual-class-option${selected ? " is-selected" : ""}"
-          type="button"
-          role="option"
-          aria-selected="${selected ? "true" : "false"}"
-          data-slot-class-option="${slot.instanceId}"
-          data-class-id="${option.id}"
-        >
-          ${option.name}
-        </button>`;
-    })
-    .join("");
-
-  return `
-    <div class="manual-class-picker${isOpen ? " is-open" : ""}" data-class-picker="${slot.instanceId}">
-      <button
-        class="manual-class-trigger"
-        type="button"
-        data-class-picker-button="${slot.instanceId}"
-        aria-haspopup="listbox"
-        aria-expanded="${isOpen ? "true" : "false"}"
-        aria-controls="manual-class-options-${slot.instanceId}"
-      >
-        <span>${klass.name}</span>
-      </button>
-      <div
-        class="manual-class-options"
-        id="manual-class-options-${slot.instanceId}"
-        role="listbox"
-        ${isOpen ? "" : "hidden"}
-      >
-        ${options}
-      </div>
-    </div>`;
-}
-
-function createManualSlotButton(slot: RosterSlot, active: boolean): string {
-  const klass = getGladiatorClass(slot.classId);
-  const remaining = getSlotRemainingState(slot);
-
-  return `
-    <button
-      class="manual-slot-row${active ? " is-active" : ""}"
-      type="button"
-      data-manual-slot-select="${slot.instanceId}"
-      aria-pressed="${active ? "true" : "false"}"
-    >
-      <span class="manual-slot-index">#${slot.teamSlot + 1}</span>
-      <span class="manual-slot-main">
-        <strong class="manual-slot-name">${slot.displayName}</strong>
-        <span class="manual-slot-class">${klass.name}</span>
-      </span>
-      <span class="manual-slot-level">Lv ${slot.level}</span>
-      <span class="manual-slot-remaining ${remaining.className}" data-slot-remaining-pill="${slot.instanceId}">${remaining.label}</span>
-    </button>`;
-}
-
-function createManualSlotEditor(slot: RosterSlot, isClassPickerOpen: boolean): string {
-  const klass = getGladiatorClass(slot.classId);
-  const remaining = getSlotRemainingState(slot);
-
-  return `
-    <section class="manual-slot-editor" data-manual-slot-editor="${slot.instanceId}">
-      <header class="manual-editor-head">
-        <div class="manual-editor-title">
-          <span class="manual-editor-kicker">${TEAM_LABELS[slot.teamId]} · #${slot.teamSlot + 1}</span>
-          <h3>${slot.displayName}</h3>
-          <span>${klass.name}</span>
-        </div>
-        <span class="manual-slot-remaining ${remaining.className}" data-slot-remaining-pill="${slot.instanceId}">${remaining.label}</span>
-      </header>
-      <div class="manual-slot-controls manual-slot-controls--editor">
-        <label class="manual-slot-field">
-          <span>Клас</span>
-          ${createManualClassPicker(slot, isClassPickerOpen)}
-        </label>
-        <label class="manual-slot-field">
-          <span>Lv</span>
-          <input class="manual-slot-input" type="number" min="${MIN_TRAINING_LEVEL}" max="${MAX_GLADIATOR_LEVEL}" value="${slot.level}" data-level-input="${slot.instanceId}" />
-        </label>
-      </div>
-      ${createSlotBudgetRow(slot, "manual")}
-      ${createTrainingStatGrid(slot, klass, "manual")}
-    </section>`;
-}
-
-function createManualTeamBlock(
-  teamId: TeamId,
-  slots: readonly RosterSlot[],
-  activeSlotId: string | null,
-): string {
-  const cards = slots.map((slot) => createManualSlotButton(slot, slot.instanceId === activeSlotId)).join("");
-
-  return `
-    <section class="manual-team-block" data-manual-team="${teamId}">
-      <header class="manual-team-head">
-        <div>
-          <span class="manual-team-label">${TEAM_LABELS[teamId]}</span>
-          <span class="manual-team-sub">${slots.length} / ${MAX_TEAM_SIZE}</span>
-        </div>
-        <label class="manual-team-size">
-          <span>Бійців</span>
-          <input class="manual-team-size-input" type="number" min="${MIN_TEAM_SIZE}" max="${MAX_TEAM_SIZE}" value="${slots.length}" data-team-size-input="${teamId}" />
-        </label>
-      </header>
-      <div class="manual-team-roster">${cards}</div>
-    </section>`;
-}
-
-function createPlacementToken(
-  slot: RosterSlot,
-  selectedSlotId: string | null,
-  placements: ManualSpawnPlacements,
-): string {
-  const klass = getGladiatorClass(slot.classId);
-  const preview = svgMap[slot.classId]?.() ?? "";
-  const isSelected = selectedSlotId === slot.instanceId;
-  const isPlaced = isValidSpawnCell(placements[slot.instanceId]);
-
-  return `
-    <button
-      class="placement-token${isSelected ? " is-selected" : ""}${isPlaced ? " is-placed" : ""}"
-      type="button"
-      draggable="true"
-      data-placement-token="${slot.instanceId}"
-      aria-pressed="${isSelected ? "true" : "false"}"
-    >
-      <span class="placement-token-model" aria-hidden="true">${preview}</span>
-      <span class="placement-token-copy">
-        <strong>${slot.displayName} (${slot.level})</strong>
-        <span>${klass.name}</span>
-      </span>
-    </button>`;
-}
-
-function getPlacementOccupant(
-  slots: readonly RosterSlot[],
-  placements: ManualSpawnPlacements,
-  cell: SpawnGridCell,
-): RosterSlot | undefined {
-  return slots.find((slot) => isSameSpawnCell(placements[slot.instanceId], cell));
-}
-
-function createPlacementCell(
-  teamId: TeamId,
-  cell: SpawnGridCell,
-  occupant: RosterSlot | undefined,
-  selectedSlotId: string | null,
-): string {
-  const occupantModel = occupant ? svgMap[occupant.classId]?.() ?? "" : "";
-  const selectedClass = occupant?.instanceId === selectedSlotId ? " is-selected" : "";
-  const occupiedClass = occupant ? " is-occupied" : "";
-
-  return `
-    <div
-      class="placement-cell${occupiedClass}${selectedClass}"
-      data-placement-cell
-      data-placement-team="${teamId}"
-      data-placement-column="${cell.column}"
-      data-placement-row="${cell.row}"
-      role="button"
-      tabindex="0"
-      aria-label="${TEAM_LABELS[teamId]} ${cell.column + 1}-${cell.row + 1}"
-    >
-      ${
-        occupant
-          ? `
-            <div class="placement-cell-card" draggable="true" data-placement-token="${occupant.instanceId}">
-              <span class="placement-cell-name">${occupant.displayName} (${occupant.level})</span>
-              <span class="placement-cell-model" aria-hidden="true">${occupantModel}</span>
-            </div>
-            <button
-              class="placement-cell-clear"
-              type="button"
-              data-placement-clear="${occupant.instanceId}"
-              aria-label="Прибрати ${occupant.displayName} з позиції"
-            >
-              ×
-            </button>`
-          : ""
-      }
-    </div>`;
-}
-
-function createManualPlacementTeamGrid(
-  teamId: TeamId,
-  slots: readonly RosterSlot[],
-  placements: ManualSpawnPlacements,
-  selectedSlotId: string | null,
-): string {
-  const tokens = slots
-    .map((slot) => createPlacementToken(slot, selectedSlotId, placements))
-    .join("");
-  const cells = getAllSpawnGridCells()
-    .map((cell) =>
-      createPlacementCell(
-        teamId,
-        cell,
-        getPlacementOccupant(slots, placements, cell),
-        selectedSlotId,
-      ),
-    )
-    .join("");
-
-  return `
-    <section class="placement-team" data-placement-team-block="${teamId}">
-      <header class="placement-team-head">
-        <div>
-          <span class="manual-team-label">${TEAM_LABELS[teamId]}</span>
-          <span class="manual-team-sub">${slots.length} / ${SPAWN_GRID_COLUMNS * SPAWN_GRID_ROWS}</span>
-        </div>
-        <div class="placement-team-controls">
-          <span>${SPAWN_GRID_COLUMNS} горизонталі</span>
-          <span>${SPAWN_GRID_ROWS} вертикалі</span>
-          <button class="placement-auto-button" type="button" data-placement-auto-team="${teamId}">Авто</button>
-        </div>
-      </header>
-      <div class="placement-bench" data-placement-bench="${teamId}">${tokens}</div>
-      <div class="placement-grid-shell">
-        <div class="placement-line-labels" aria-hidden="true">
-          <span>Остання лінія</span>
-          <span>2 лінія</span>
-          <span>Перша лінія</span>
-        </div>
-        <div class="placement-grid" data-placement-grid="${teamId}">
-          ${cells}
-        </div>
-      </div>
-    </section>`;
-}
-
-function createManualPlacementPanel(
-  roster: Roster,
-  placements: ManualSpawnPlacements,
-  selectedSlotId: string | null,
-): string {
-  return `
-    <section class="placement-panel" data-placement-panel>
-      <header class="placement-panel-head">
-        <span>Розстановка</span>
-      </header>
-      <div class="placement-layout">
-        ${TEAM_IDS.map((teamId) =>
-          createManualPlacementTeamGrid(teamId, roster[teamId], placements, selectedSlotId),
-        ).join("")}
-      </div>
-    </section>`;
-}
-
-function getPlanFighter(plan: BattlePlan, id: string) {
-  const fighter = plan.fighters[id];
-  if (!fighter) {
-    throw new Error(`Missing planned fighter: ${id}`);
-  }
-  return fighter;
-}
-
-const runtimeFighterNames: Record<string, string> = {};
-
-function rememberFighterName(id: string, name: string): void {
-  runtimeFighterNames[id] = name;
-}
-
-function getGladiatorName(id: string): string {
-  return (
-    runtimeFighterNames[id] ??
-    gladiatorClasses.find((gladiator) => gladiator.id === id)?.name ??
-    id
-  );
-}
-
-function getTacticText(tactic: BattleEvent["decisions"][number]["tactic"]): string {
-  const labels: Record<BattleEvent["decisions"][number]["tactic"], string> = {
-    press: "тисне",
-    balanced: "тримає темп",
-    counter: "ловить контру",
-    recover: "економить сили",
-  };
-
-  return labels[tactic];
-}
-
-function getOutcomeText(event: BattleEvent): string {
-  const counterPrefix = event.counterAttack ? "зустрічна атака, " : "";
-
-  if (event.actionType === "javelin") {
-    if (event.outcome === "hit") {
-      return "спис влучив";
-    }
-
-    if (event.outcome === "block") {
-      return "спис заблоковано";
-    }
-
-    return "ухилення від списа";
-  }
-
-  if (event.netTrap) {
-    return event.netTrap.escaped
-      ? "ухилення від сітки"
-      : `сітка, ${formatDuration(event.netTrap.durationMs)} без ходу`;
-  }
-
-  if (event.outcome === "block") {
-    return `${counterPrefix}блок`;
-  }
-
-  if (event.outcome === "miss") {
-    return `${counterPrefix}ухилення`;
-  }
-
-  return event.critical
-    ? `${counterPrefix}критичний удар, -${event.damage} HP`
-    : `${counterPrefix}-${event.damage} HP`;
-}
-
-function isCombatEvent(event: BattleEvent): boolean {
-  return event.actionType === "strike" || event.actionType === "net" || event.actionType === "javelin";
-}
-
-function getEventResolutionTimeMs(event: BattleEvent): number {
-  const impactDelay = isCombatEvent(event) ? event.impactDelayMs : 0;
-
-  return event.timeMs + event.movement.durationMs + impactDelay;
-}
-
-function getBattleEventsByResolution(plan: BattlePlan): BattleEvent[] {
-  return [...plan.events].sort(
-    (a, b) => getEventResolutionTimeMs(a) - getEventResolutionTimeMs(b) || a.index - b.index,
-  );
-}
-
-function createBattleResultStats(plan: BattlePlan): BattleResultStats {
-  const damageByFighter: Record<string, number> = {};
-  const finalHpByFighter: Record<string, number> = {};
-
-  for (const fighterId of Object.keys(plan.fighters)) {
-    damageByFighter[fighterId] = 0;
-    finalHpByFighter[fighterId] = getPlanFighter(plan, fighterId).maxHp;
-  }
-
-  let combatActions = 0;
-  let hits = 0;
-  let criticals = 0;
-  let blocks = 0;
-  let misses = 0;
-  let successfulNets = 0;
-  let escapedNets = 0;
-  let javelinHits = 0;
-  let javelinBlocks = 0;
-  let javelinDodges = 0;
-
-  for (const event of getBattleEventsByResolution(plan)) {
-    finalHpByFighter[event.defenderId] = event.defenderHp;
-
-    if (event.damage > 0) {
-      damageByFighter[event.attackerId] =
-        (damageByFighter[event.attackerId] ?? 0) + event.damage;
-    }
-
-    if (!isCombatEvent(event)) {
-      continue;
-    }
-
-    combatActions += 1;
-
-    if (event.outcome === "hit") {
-      hits += 1;
-    } else if (event.outcome === "block") {
-      blocks += 1;
-    } else {
-      misses += 1;
-    }
-
-    if (event.critical) {
-      criticals += 1;
-    }
-
-    if (event.netTrap?.escaped) {
-      escapedNets += 1;
-    } else if (event.netTrap) {
-      successfulNets += 1;
-    }
-
-    if (event.actionType === "javelin") {
-      if (event.outcome === "hit") {
-        javelinHits += 1;
-      } else if (event.outcome === "block") {
-        javelinBlocks += 1;
-      } else {
-        javelinDodges += 1;
-      }
-    }
-  }
-
-  return {
-    totalActions: plan.events.length,
-    combatActions,
-    hits,
-    criticals,
-    blocks,
-    misses,
-    successfulNets,
-    escapedNets,
-    javelinHits,
-    javelinBlocks,
-    javelinDodges,
-    damageByFighter,
-    finalHpByFighter,
-  };
-}
-
-function createBattleAudioController(): BattleAudioController {
-  const activeSounds = new Set<HTMLAudioElement>();
-  const soundBaseVolumes = new WeakMap<HTMLAudioElement, number>();
-  let ambientSound: HTMLAudioElement | null = null;
-  let masterVolume = getStoredBattleVolume();
-  let muted = masterVolume <= 0;
-
-  const cleanupSound = (sound: HTMLAudioElement): void => {
-    activeSounds.delete(sound);
-  };
-
-  const applyEffectiveVolume = (sound: HTMLAudioElement): void => {
-    const baseVolume = soundBaseVolumes.get(sound) ?? sound.volume;
-    sound.muted = muted || masterVolume <= 0;
-    sound.volume = clampMasterVolume(baseVolume * masterVolume);
-  };
-
-  const registerBaseVolume = (sound: HTMLAudioElement, baseVolume: number): void => {
-    soundBaseVolumes.set(sound, clampMasterVolume(baseVolume));
-    applyEffectiveVolume(sound);
-  };
-
-  const refreshActiveVolumes = (): void => {
-    for (const sound of activeSounds) {
-      applyEffectiveVolume(sound);
-    }
-  };
-
-  const trackSound = (sound: HTMLAudioElement): void => {
-    activeSounds.add(sound);
-    sound.addEventListener("ended", () => cleanupSound(sound), { once: true });
-    sound.addEventListener("error", () => cleanupSound(sound), { once: true });
-  };
-
-  const safeResetTime = (sound: HTMLAudioElement): void => {
-    try {
-      sound.currentTime = 0;
-    } catch {
-      // Some browsers throw while metadata is still loading.
-    }
-  };
-
-  const stopAll = (): void => {
-    for (const sound of activeSounds) {
-      sound.pause();
-      safeResetTime(sound);
-    }
-
-    activeSounds.clear();
-    ambientSound = null;
-  };
-
-  const playOneShot = (url: string, volume: number): void => {
-    const sound = new Audio(url);
-    registerBaseVolume(sound, volume);
-    sound.preload = "auto";
-    trackSound(sound);
-
-    void sound.play().catch(() => {
-      cleanupSound(sound);
-    });
-  };
-
-  const startBattle = (): void => {
-    stopAll();
-
-    const sound = new Audio(coliseumUrl);
-    sound.loop = true;
-    registerBaseVolume(sound, 0.42);
-    sound.preload = "auto";
-    ambientSound = sound;
-    trackSound(sound);
-
-    void sound.play().catch(() => {
-      if (ambientSound === sound) {
-        ambientSound = null;
-      }
-      cleanupSound(sound);
-    });
-  };
-
-  const playAttack = (attackCssClass: string): void => {
-    const url = attackSoundUrls[attackCssClass];
-    if (!url) {
-      return;
-    }
-
-    playOneShot(url, attackCssClass === "attack-net-throw" ? 0.78 : 0.84);
-  };
-
-  const playApplause = (level: CrowdApplauseLevel): Promise<void> => {
-    const sound = new Audio(applauseSoundUrls[level]);
-    registerBaseVolume(sound, applauseVolumes[level]);
-    sound.preload = "auto";
-    trackSound(sound);
-
-    return new Promise((resolve) => {
-      const finish = (): void => {
-        cleanupSound(sound);
-        resolve();
-      };
-
-      sound.addEventListener("ended", finish, { once: true });
-      sound.addEventListener("error", finish, { once: true });
-
-      void sound.play().catch(() => {
-        finish();
-      });
-    });
-  };
-
-  const playBlock = (classId: string): void => {
-    const url = blockSoundUrls[classId];
-    if (!url) {
-      return;
-    }
-
-    playOneShot(url, 0.88);
-  };
-
-  const playBlood = (): void => {
-    const soundIndex = Math.floor(Math.random() * bloodSoundUrls.length);
-    playOneShot(bloodSoundUrls[soundIndex] ?? bloodUrl, 0.82);
-  };
-
-  const playFinaleAndStop = (): void => {
-    void playApplause("high").finally(() => stopAll());
-  };
-
-  const setMasterVolume = (volume: number): void => {
-    masterVolume = clampMasterVolume(volume);
-    storeBattleVolume(masterVolume);
-    refreshActiveVolumes();
-  };
-
-  const setMuted = (nextMuted: boolean): void => {
-    muted = nextMuted;
-    refreshActiveVolumes();
-  };
-
-  const getMasterVolume = (): number => masterVolume;
-
-  const isMuted = (): boolean => muted;
-
-  return {
-    startBattle,
-    playAttack,
-    playApplause,
-    playBlock,
-    playBlood,
-    playFinaleAndStop,
-    setMasterVolume,
-    setMuted,
-    getMasterVolume,
-    isMuted,
-    stopAll,
-  };
-}
-
 export function createGladiatorShowcase(container: HTMLElement): () => void {
-  const autoRoster: Roster = createAutoRoster();
+  let autoRoster: Roster = createAutoRoster();
   let manualRoster: Roster = createManualDefaultRoster();
   let trainingMode: TrainingMode = "auto";
   const manualSpawnPlacements: ManualSpawnPlacements = {};
@@ -1294,219 +110,28 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     runtimeFighters.filter((fighter) => fighter.teamId === teamId);
 
   const initialTypeCards = gladiatorClasses.map((gladiator) => createTypeCard(gladiator)).join("");
-  const overlay = document.createElement("div");
-  overlay.className = "showcase-overlay";
-  overlay.innerHTML = `
-    <header class="showcase-header">
-      <div class="showcase-header-bar">
-        <div class="showcase-header-copy">
-          <h1 class="showcase-title">Gladiators Online</h1>
-        </div>
-        <button
-          class="gladiator-types-btn"
-          type="button"
-          data-gladiator-types-open
-          aria-haspopup="dialog"
-          aria-expanded="false"
-        >
-          Типи гладіаторів
-        </button>
-      </div>
-    </header>
-
-    <section class="battle-arena-panel" aria-label="Арена бою">
-      <div class="battle-toolbar">
-        <div>
-          <p class="battle-kicker">Симуляція</p>
-          <p class="battle-status" data-battle-status>Арена готова до жеребу.</p>
-        </div>
-        <div class="battle-actions">
-          <div class="battle-volume-control" data-volume-control>
-            <button
-              class="battle-volume-toggle"
-              type="button"
-              data-volume-toggle
-              aria-label="Вимкнути звук"
-              aria-pressed="false"
-            >
-              <svg class="battle-volume-icon battle-volume-icon-on" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
-                <path d="M16 8.5a5 5 0 0 1 0 7"></path>
-                <path d="M18.5 6a8.5 8.5 0 0 1 0 12"></path>
-              </svg>
-              <svg class="battle-volume-icon battle-volume-icon-off" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
-                <path d="m16 9 5 5"></path>
-                <path d="m21 9-5 5"></path>
-              </svg>
-            </button>
-            <input
-              class="battle-volume-slider"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value="100"
-              data-volume-slider
-              aria-label="Загальна гучність"
-            />
-          </div>
-          <button class="battle-button" type="button" data-battle-button>Розпочати бій</button>
-          <button
-            class="battle-results-button"
-            type="button"
-            data-battle-results-button
-            disabled
-          >
-            Переглянути результати
-          </button>
-          <button class="battle-preserve-button" type="button" data-preserve-settings hidden>${SAVE_BATTLE_SETUP_LABEL}</button>
-        </div>
-      </div>
-
-      <div class="training-panel" data-training-panel>
-        <div class="training-panel-head">
-          <div class="training-mode-toggle" role="group" aria-label="Training mode">
-            <button class="training-mode-button is-active" type="button" data-training-mode="auto">Auto</button>
-            <button class="training-mode-button" type="button" data-training-mode="manual">Manual</button>
-          </div>
-          <span>Level 0: ${LEVEL_ZERO_STAT_POINTS} pts</span>
-          <span>+${POINTS_PER_GLADIATOR_LEVEL} pts / lvl</span>
-          <span class="training-panel-hint" data-training-mode-hint></span>
-        </div>
-        <div class="training-body" data-training-body></div>
-      </div>
-
-      <div class="battle-field">
-        <div class="battle-team-column" data-team-column="left"></div>
-        <div class="battle-stage-column">
-          <div class="battle-stage-actions">
-            <button class="battle-button battle-button--stage" type="button" data-battle-button>Розпочати бій</button>
-            <button class="battle-results-button battle-results-button--stage" type="button" data-battle-results-button disabled>Переглянути результати</button>
-          </div>
-          <div class="arena-stage" data-arena-stage>
-            <div class="battle-volume-control battle-volume-control--stage" data-volume-control>
-              <button
-                class="battle-volume-toggle"
-                type="button"
-                data-volume-toggle
-                aria-label="Вимкнути звук"
-                aria-pressed="false"
-              >
-                <svg class="battle-volume-icon battle-volume-icon-on" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
-                  <path d="M16 8.5a5 5 0 0 1 0 7"></path>
-                  <path d="M18.5 6a8.5 8.5 0 0 1 0 12"></path>
-                </svg>
-                <svg class="battle-volume-icon battle-volume-icon-off" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
-                  <path d="m16 9 5 5"></path>
-                  <path d="m21 9-5 5"></path>
-                </svg>
-              </button>
-              <input
-                class="battle-volume-slider"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value="100"
-                data-volume-slider
-                aria-label="Загальна гучність"
-              />
-            </div>
-            <div class="arena-world" data-arena-world>
-              <div class="arena-crowd"></div>
-              <div class="arena-fighters" data-arena-fighters></div>
-            </div>
-          </div>
-        </div>
-        <div class="battle-team-column" data-team-column="right"></div>
-      </div>
-
-      <div class="battle-summary">
-        <div class="battle-result" data-battle-result>Результат ще не визначено.</div>
-        <div class="battle-log" data-battle-log aria-live="polite"></div>
-      </div>
-    </section>
-
-    <div class="gladiator-types-modal" data-gladiator-types-modal hidden aria-hidden="true">
-      <section
-        class="gladiator-types-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="gladiator-types-title"
-      >
-        <button
-          class="gladiator-types-close"
-          type="button"
-          data-gladiator-types-close
-          aria-label="Закрити довідник типів"
-        >
-          ×
-        </button>
-        <p class="gladiator-types-kicker">Довідник арени</p>
-        <h2 class="gladiator-types-title" id="gladiator-types-title">Типи гладіаторів</h2>
-        <p class="gladiator-types-lead">
-          Базові архетипи, стартові характеристики та озброєння. Без персональних імен і без поточних бонусів зі сцени.
-        </p>
-        <section class="gladiator-cards gladiator-cards--modal" aria-label="Типи гладіаторів">
-          ${initialTypeCards}
-        </section>
-      </section>
-    </div>
-  `;
+  const {
+    overlay,
+    battleButtons,
+    battleResultsButtons,
+    volumeToggles,
+    volumeSliders,
+    preserveSettingsButton,
+    battleSeedInput,
+    statusEl,
+    resultEl,
+    logEl,
+    stageEl,
+    arenaWorldEl,
+    typesButton,
+    typesModal,
+    teamColumnEls,
+    arenaFightersEl,
+    trainingBodyEl,
+    trainingModeHintEl,
+  } = createShowcaseOverlay(initialTypeCards);
 
   container.appendChild(overlay);
-
-  const battleButtonCandidates = Array.from(
-    overlay.querySelectorAll<HTMLButtonElement>("[data-battle-button]"),
-  );
-  const volumeToggles = Array.from(
-    overlay.querySelectorAll<HTMLButtonElement>("[data-volume-toggle]"),
-  );
-  const volumeSliders = Array.from(
-    overlay.querySelectorAll<HTMLInputElement>("[data-volume-slider]"),
-  );
-  const battleResultsButtonCandidates = Array.from(
-    overlay.querySelectorAll<HTMLButtonElement>("[data-battle-results-button]"),
-  );
-  const preserveSettingsButtonCandidate = overlay.querySelector<HTMLButtonElement>("[data-preserve-settings]");
-  const statusCandidate = overlay.querySelector<HTMLElement>("[data-battle-status]");
-  const resultCandidate = overlay.querySelector<HTMLElement>("[data-battle-result]");
-  const logCandidate = overlay.querySelector<HTMLElement>("[data-battle-log]");
-  const stageCandidate = overlay.querySelector<HTMLElement>("[data-arena-stage]");
-  const arenaWorldCandidate = overlay.querySelector<HTMLElement>("[data-arena-world]");
-  const typesButtonCandidate = overlay.querySelector<HTMLButtonElement>("[data-gladiator-types-open]");
-  const typesModalCandidate = overlay.querySelector<HTMLElement>("[data-gladiator-types-modal]");
-
-  if (
-    battleButtonCandidates.length === 0 ||
-    volumeToggles.length === 0 ||
-    volumeSliders.length === 0 ||
-    battleResultsButtonCandidates.length === 0 ||
-    !preserveSettingsButtonCandidate ||
-    !statusCandidate ||
-    !resultCandidate ||
-    !logCandidate ||
-    !stageCandidate ||
-    !arenaWorldCandidate ||
-    !typesButtonCandidate ||
-    !typesModalCandidate
-  ) {
-    throw new Error("Battle UI was not created correctly");
-  }
-
-  const battleButtons = battleButtonCandidates;
-  const battleResultsButtons = battleResultsButtonCandidates;
-  const preserveSettingsButton = preserveSettingsButtonCandidate;
-  const statusEl = statusCandidate;
-  const resultEl = resultCandidate;
-  const logEl = logCandidate;
-  const stageEl = stageCandidate;
-  const arenaWorldEl = arenaWorldCandidate;
-  const typesButton = typesButtonCandidate;
-  const typesModal = typesModalCandidate;
 
   const setGladiatorTypesModalOpen = (open: boolean): void => {
     typesModal.hidden = !open;
@@ -1521,33 +146,22 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
   const javelinCounts = new Map<string, number>();
   const timers = new Map<number, (() => void) | null>();
   const defeatedFighters = new Set<string>();
-  const successfulHitStreaks = new Map<string, number>();
-  const successfulDodgeStreaks = new Map<string, number>();
   const battleAudio = createBattleAudioController();
-  let lastAudibleVolume =
-    battleAudio.getMasterVolume() > 0
-      ? battleAudio.getMasterVolume()
-      : DEFAULT_RESTORED_BATTLE_VOLUME;
+  const {
+    onVolumeSliderInput,
+    onVolumeToggleClick,
+    syncVolumeControl,
+  } = createBattleVolumeControls({
+    battleAudio,
+    volumeSliders,
+    volumeToggles,
+  });
   let disposed = false;
   let isBattlePlaying = false;
   let isBattleComplete = false;
   let activeBattlePlan: BattlePlan | null = null;
   let currentRun = 0;
   const fighterArenaPositions = new Map<string, BattlePoint>();
-  let arenaCameraState: ArenaCameraState = { x: 0, y: 0, zoom: 1 };
-  let arenaCameraTarget: ArenaCameraState = { x: 0, y: 0, zoom: 1 };
-  let arenaCameraInitialized = false;
-  let arenaCameraUpdateFrame = 0;
-  let arenaCameraAnimationFrame = 0;
-  let arenaCameraLastFrameMs = 0;
-
-  const teamColumnEls: Record<TeamId, HTMLElement> = {
-    left: overlay.querySelector<HTMLElement>('[data-team-column="left"]')!,
-    right: overlay.querySelector<HTMLElement>('[data-team-column="right"]')!,
-  };
-  const arenaFightersEl = overlay.querySelector<HTMLElement>("[data-arena-fighters]")!;
-  const trainingBodyEl = overlay.querySelector<HTMLElement>("[data-training-body]")!;
-  const trainingModeHintEl = overlay.querySelector<HTMLElement>("[data-training-mode-hint]")!;
 
   function setBattleResultsButtonEnabled(enabled: boolean): void {
     for (const btn of battleResultsButtons) {
@@ -1563,325 +177,74 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     }
   }
 
-  function syncVolumeControl(): void {
-    const volume = battleAudio.getMasterVolume();
-    const isMuted = battleAudio.isMuted() || volume <= 0;
-    const label = isMuted ? "Увімкнути звук" : "Вимкнути звук";
+  function getRequestedBattleSeed(): string | undefined {
+    const seed = battleSeedInput.value.trim();
 
-    for (const slider of volumeSliders) {
-      slider.value = String(Math.round(volume * 100));
-    }
-
-    for (const toggle of volumeToggles) {
-      toggle.classList.toggle("is-muted", isMuted);
-      toggle.setAttribute("aria-label", label);
-      toggle.setAttribute("aria-pressed", isMuted ? "true" : "false");
-      toggle.title = label;
-    }
+    return seed.length > 0 ? seed : undefined;
   }
 
-  const onVolumeSliderInput = (event: Event): void => {
-    if (!(event.currentTarget instanceof HTMLInputElement)) {
-      return;
+  function createCurrentBattleReplaySetup(): BattleReplaySetup {
+    return {
+      trainingMode,
+      roster: cloneRoster(getActiveRoster()),
+      spawnPositions: cloneBattlePoints(currentSpawnPositions),
+      manualSpawnPlacements: cloneManualSpawnPlacements(manualSpawnPlacements),
+      teamSpawnSeeds: { ...teamSpawnSeeds },
+    };
+  }
+
+  function replaceManualSpawnPlacements(placements: ManualSpawnPlacements): void {
+    for (const slotId of Object.keys(manualSpawnPlacements)) {
+      delete manualSpawnPlacements[slotId];
     }
 
-    const sliderValue = Number(event.currentTarget.value);
-    const nextVolume = clampMasterVolume(
-      Number.isFinite(sliderValue) ? sliderValue / 100 : 0,
-    );
+    Object.assign(manualSpawnPlacements, placements);
+  }
 
-    battleAudio.setMasterVolume(nextVolume);
+  function restoreBattleReplaySetup(replay: BattleReplayRecord): void {
+    const setup = replay.setup;
+    const replayRoster = cloneRoster(setup.roster);
+    const replaySpawnPositions =
+      Object.keys(setup.spawnPositions).length > 0
+        ? cloneBattlePoints(setup.spawnPositions)
+        : cloneBattlePoints(replay.plan.startPositions);
 
-    if (nextVolume > 0) {
-      lastAudibleVolume = nextVolume;
-      battleAudio.setMuted(false);
+    trainingMode = setup.trainingMode === "manual" ? "manual" : "auto";
+
+    if (trainingMode === "auto") {
+      autoRoster = replayRoster;
     } else {
-      battleAudio.setMuted(true);
+      manualRoster = replayRoster;
     }
 
-    syncVolumeControl();
+    replaceManualSpawnPlacements(cloneManualSpawnPlacements(setup.manualSpawnPlacements));
+    teamSpawnSeeds.left = setup.teamSpawnSeeds.left;
+    teamSpawnSeeds.right = setup.teamSpawnSeeds.right;
+    activeManualSlotId = manualRoster.left[0]?.instanceId ?? manualRoster.right[0]?.instanceId ?? null;
+    openClassPickerSlotId = null;
+    selectedPlacementSlotId = null;
+    draggingPlacementSlotId = null;
+    renderAll();
+    currentSpawnPositions = replaySpawnPositions;
+    setInitialFighterPositions();
+  }
+
+  const arenaCamera = createArenaCameraController({
+    stageEl,
+    arenaWorldEl,
+    isDisposed: () => disposed,
+    getRuntimeFighters: () => runtimeFighters,
+    getFighterArenaPosition: (fighterId) => fighterArenaPositions.get(fighterId),
+    getCurrentSpawnPositions: () => currentSpawnPositions,
+    getFighterElement,
+  });
+
+  const scheduleArenaCameraUpdate = (): void => {
+    arenaCamera.scheduleUpdate();
   };
-
-  const onVolumeToggleClick = (): void => {
-    const shouldMute = !battleAudio.isMuted() && battleAudio.getMasterVolume() > 0;
-
-    if (shouldMute) {
-      battleAudio.setMuted(true);
-    } else {
-      const restoredVolume =
-        battleAudio.getMasterVolume() > 0
-          ? battleAudio.getMasterVolume()
-          : lastAudibleVolume;
-      battleAudio.setMasterVolume(restoredVolume);
-      battleAudio.setMuted(false);
-    }
-
-    syncVolumeControl();
-  };
-
-  function getArenaCameraBounds(
-    state: ArenaCameraState,
-    stageWidth: number,
-    stageHeight: number,
-    worldWidth: number,
-    worldHeight: number,
-  ): ArenaCameraBounds {
-    const halfWidth = stageWidth / (2 * worldWidth * state.zoom);
-    const halfHeight = stageHeight / (2 * worldHeight * state.zoom);
-    const centerX = 0.5 - state.x / (worldWidth * state.zoom);
-    const centerY = 0.5 - state.y / (worldHeight * state.zoom);
-
-    return {
-      minX: centerX - halfWidth,
-      maxX: centerX + halfWidth,
-      minY: centerY - halfHeight,
-      maxY: centerY + halfHeight,
-    };
-  }
-
-  function getLargestArenaFighterWidth(): number {
-    let largest = 0;
-
-    for (const fighter of runtimeFighters) {
-      largest = Math.max(largest, getFighterElement(fighter.id)?.offsetWidth ?? 0);
-    }
-
-    return largest;
-  }
-
-  function getCameraRenderPoint(point: BattlePoint): { x: number; y: number } {
-    const metrics = getArenaRenderMetrics(point);
-
-    return {
-      x: metrics.x / 100,
-      y: clampNumber(1 - metrics.bottom / 100 - 0.16 * metrics.scale, 0.05, 0.95),
-    };
-  }
-
-  function getTrackedFighterCameraBounds(): ArenaCameraBounds | null {
-    const points = runtimeFighters
-      .map((fighter) => fighterArenaPositions.get(fighter.id) ?? currentSpawnPositions[fighter.id])
-      .filter((point): point is BattlePoint => Boolean(point))
-      .map(getCameraRenderPoint);
-
-    if (points.length === 0) {
-      return null;
-    }
-
-    return points.reduce<ArenaCameraBounds>(
-      (bounds, point) => ({
-        minX: Math.min(bounds.minX, point.x),
-        maxX: Math.max(bounds.maxX, point.x),
-        minY: Math.min(bounds.minY, point.y),
-        maxY: Math.max(bounds.maxY, point.y),
-      }),
-      {
-        minX: points[0]!.x,
-        maxX: points[0]!.x,
-        minY: points[0]!.y,
-        maxY: points[0]!.y,
-      },
-    );
-  }
-
-  function clampArenaCameraOffset(
-    centerX: number,
-    centerY: number,
-    zoom: number,
-    stageWidth: number,
-    stageHeight: number,
-    worldWidth: number,
-    worldHeight: number,
-  ): ArenaCameraState {
-    const maxX = Math.max(0, (worldWidth * zoom - stageWidth) / 2);
-    const maxY = Math.max(0, (worldHeight * zoom - stageHeight) / 2);
-
-    return {
-      x: clampNumber(-(centerX - 0.5) * worldWidth * zoom, -maxX, maxX),
-      y: clampNumber(-(centerY - 0.5) * worldHeight * zoom, -maxY, maxY),
-      zoom,
-    };
-  }
-
-  function doesCameraContainBounds(
-    cameraBounds: ArenaCameraBounds,
-    trackedBounds: ArenaCameraBounds,
-    sidePadding: number,
-  ): boolean {
-    return (
-      trackedBounds.minX - sidePadding >= cameraBounds.minX + CAMERA_FIT_TOLERANCE &&
-      trackedBounds.maxX + sidePadding <= cameraBounds.maxX - CAMERA_FIT_TOLERANCE &&
-      trackedBounds.minY - CAMERA_VERTICAL_GUTTER >= cameraBounds.minY + CAMERA_FIT_TOLERANCE &&
-      trackedBounds.maxY + CAMERA_VERTICAL_GUTTER <= cameraBounds.maxY - CAMERA_FIT_TOLERANCE
-    );
-  }
-
-  function applyArenaCamera(state: ArenaCameraState): void {
-    arenaCameraState = state;
-    stageEl.style.setProperty("--arena-camera-x", `${state.x.toFixed(1)}px`);
-    stageEl.style.setProperty("--arena-camera-y", `${state.y.toFixed(1)}px`);
-    stageEl.style.setProperty("--arena-camera-zoom", state.zoom.toFixed(3));
-    arenaCameraInitialized = true;
-  }
-
-  function isArenaCameraSettled(state: ArenaCameraState, target: ArenaCameraState): boolean {
-    return (
-      Math.abs(state.x - target.x) <= CAMERA_SETTLE_EPSILON_PX &&
-      Math.abs(state.y - target.y) <= CAMERA_SETTLE_EPSILON_PX &&
-      Math.abs(state.zoom - target.zoom) <= CAMERA_SETTLE_EPSILON_ZOOM
-    );
-  }
-
-  function stopArenaCameraAnimation(): void {
-    if (arenaCameraAnimationFrame !== 0) {
-      window.cancelAnimationFrame(arenaCameraAnimationFrame);
-      arenaCameraAnimationFrame = 0;
-    }
-
-    arenaCameraLastFrameMs = 0;
-  }
-
-  function animateArenaCamera(timestampMs: number): void {
-    if (disposed) {
-      arenaCameraAnimationFrame = 0;
-      arenaCameraLastFrameMs = 0;
-      return;
-    }
-
-    const elapsedMs =
-      arenaCameraLastFrameMs > 0 ? Math.min(64, timestampMs - arenaCameraLastFrameMs) : 16.7;
-    const positionT = 1 - Math.exp(-elapsedMs / CAMERA_POSITION_SMOOTHING_MS);
-    const zoomT = 1 - Math.exp(-elapsedMs / CAMERA_ZOOM_SMOOTHING_MS);
-    const nextState: ArenaCameraState = {
-      x: lerp(arenaCameraState.x, arenaCameraTarget.x, positionT),
-      y: lerp(arenaCameraState.y, arenaCameraTarget.y, positionT),
-      zoom: lerp(arenaCameraState.zoom, arenaCameraTarget.zoom, zoomT),
-    };
-
-    arenaCameraLastFrameMs = timestampMs;
-
-    if (isArenaCameraSettled(nextState, arenaCameraTarget)) {
-      applyArenaCamera(arenaCameraTarget);
-      stopArenaCameraAnimation();
-      return;
-    }
-
-    applyArenaCamera(nextState);
-    arenaCameraAnimationFrame = window.requestAnimationFrame(animateArenaCamera);
-  }
-
-  function startArenaCameraAnimation(): void {
-    if (arenaCameraAnimationFrame !== 0) {
-      return;
-    }
-
-    arenaCameraLastFrameMs = 0;
-    arenaCameraAnimationFrame = window.requestAnimationFrame(animateArenaCamera);
-  }
-
-  function setArenaCameraTarget(target: ArenaCameraState): void {
-    arenaCameraTarget = target;
-
-    if (!arenaCameraInitialized) {
-      applyArenaCamera(target);
-      return;
-    }
-
-    if (isArenaCameraSettled(arenaCameraState, target)) {
-      applyArenaCamera(target);
-      stopArenaCameraAnimation();
-      return;
-    }
-
-    startArenaCameraAnimation();
-  }
-
-  function updateArenaCameraNow(): void {
-    if (disposed) {
-      return;
-    }
-
-    const stageWidth = stageEl.clientWidth;
-    const stageHeight = stageEl.clientHeight;
-    const worldWidth = arenaWorldEl.offsetWidth;
-    const worldHeight = arenaWorldEl.offsetHeight;
-    const trackedBounds = getTrackedFighterCameraBounds();
-
-    if (
-      stageWidth <= 0 ||
-      stageHeight <= 0 ||
-      worldWidth <= 0 ||
-      worldHeight <= 0 ||
-      !trackedBounds
-    ) {
-      return;
-    }
-
-    const worldWidthRatio = worldWidth / stageWidth;
-    const worldHeightRatio = worldHeight / stageHeight;
-    const sidePadding = clampNumber(
-      (getLargestArenaFighterWidth() / 2 + CAMERA_SIDE_GUTTER_PX) / worldWidth,
-      0.07,
-      0.14,
-    );
-    const widthToFit = trackedBounds.maxX - trackedBounds.minX + sidePadding * 2;
-    const heightToFit = trackedBounds.maxY - trackedBounds.minY + CAMERA_VERTICAL_GUTTER * 2;
-    const coverageMinZoom = Math.max(
-      CAMERA_MIN_ZOOM,
-      stageWidth / worldWidth,
-      stageHeight / worldHeight,
-    );
-    const targetZoom = clampNumber(
-      Math.min(1 / (worldWidthRatio * widthToFit), 1 / (worldHeightRatio * heightToFit)),
-      coverageMinZoom,
-      CAMERA_MAX_ZOOM,
-    );
-    const closeEnoughToFreeze =
-      trackedBounds.maxX - trackedBounds.minX <= CAMERA_CLOSE_FREEZE_SPAN &&
-      targetZoom >= CAMERA_MAX_ZOOM - 0.001;
-
-    if (
-      arenaCameraInitialized &&
-      closeEnoughToFreeze &&
-      arenaCameraState.zoom >= CAMERA_MAX_ZOOM - 0.01 &&
-      doesCameraContainBounds(
-        getArenaCameraBounds(arenaCameraState, stageWidth, stageHeight, worldWidth, worldHeight),
-        trackedBounds,
-        sidePadding,
-      )
-    ) {
-      arenaCameraTarget = arenaCameraState;
-      stopArenaCameraAnimation();
-      return;
-    }
-
-    setArenaCameraTarget(
-      clampArenaCameraOffset(
-        (trackedBounds.minX + trackedBounds.maxX) / 2,
-        (trackedBounds.minY + trackedBounds.maxY) / 2,
-        targetZoom,
-        stageWidth,
-        stageHeight,
-        worldWidth,
-        worldHeight,
-      ),
-    );
-  }
-
-  function scheduleArenaCameraUpdate(): void {
-    if (arenaCameraUpdateFrame !== 0) {
-      return;
-    }
-
-    arenaCameraUpdateFrame = window.requestAnimationFrame(() => {
-      arenaCameraUpdateFrame = 0;
-      updateArenaCameraNow();
-    });
-  }
 
   const onArenaResize = (): void => {
-    arenaCameraInitialized = false;
-    scheduleArenaCameraUpdate();
+    arenaCamera.handleResize();
   };
 
   function disposeSkeletons(): void {
@@ -2078,7 +441,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     sanitizeManualSpawnPlacements();
     refreshSpawnPositions();
     fighterArenaPositions.clear();
-    arenaCameraInitialized = false;
+    arenaCamera.reset();
     renderTeamColumns();
     renderArenaFighters();
     rebuildArenaSkeletons();
@@ -2162,526 +525,45 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     skeletons.get(fighterId)?.stop();
   }
 
-  function markFighterDefeated(fighterId: string): void {
-    if (defeatedFighters.has(fighterId)) {
-      return;
-    }
-
-    defeatedFighters.add(fighterId);
-    stopWalkLoop(fighterId);
-
-    const fighterEl = getFighterElement(fighterId);
-    const fighterSvg = getArenaSvg(fighterId);
-
-    fighterSvg?.classList.remove("attacking");
-    fighterEl?.classList.remove("is-attacking", "is-walking", "is-rushing", "is-netted", "is-winded");
-    fighterEl?.classList.add("is-defeated");
-    overlay
-      .querySelector<HTMLElement>(`[data-team-fighter="${fighterId}"]`)
-      ?.classList.add("is-defeated");
-  }
-
-  function isEventBlockedByDefeat(event: BattleEvent): boolean {
-    return defeatedFighters.has(event.attackerId) || defeatedFighters.has(event.defenderId);
-  }
-
-  function startWalkLoop(
-    fighterId: string,
-    runId: number,
-    speedMultiplier: number,
-  ): void {
-    const fighterEl = getFighterElement(fighterId);
-    const skeleton = skeletons.get(fighterId);
-    const clip = walkClipMap[getFighterClassId(fighterId)];
-    const token = (walkTokens.get(fighterId) ?? 0) + 1;
-
-    walkTokens.set(fighterId, token);
-    fighterEl?.classList.add("is-walking");
-    fighterEl?.style.setProperty(
-      "--walk-cycle",
-      `${Math.max(460, Math.round((clip?.duration ?? 760) / speedMultiplier))}ms`,
-    );
-
-    if (!skeleton || !clip) return;
-
-    const walkClip = {
-      ...clip,
-      duration: Math.max(460, Math.round(clip.duration / speedMultiplier)),
-    };
-
-    void (async () => {
-      while (!disposed && runId === currentRun && walkTokens.get(fighterId) === token) {
-        await skeleton.play(walkClip);
-      }
-    })();
-  }
-
-  async function moveFighterTo(
-    fighterId: string,
-    from: BattlePoint,
-    to: BattlePoint,
-    durationMs: number,
-    runId: number,
-    rush: boolean,
-  ): Promise<void> {
-    const distance = getPointDistance(from, to);
-
-    if (distance < UI_MIN_MOVEMENT_DISTANCE || durationMs <= 0) {
-      setFighterArenaPosition(fighterId, to, 0);
-      return;
-    }
-
-    const fighterEl = getFighterElement(fighterId);
-    const speedMultiplier = rush ? 1.06 : 0.72;
-
-    if (rush) {
-      fighterEl?.classList.add("is-rushing");
-    }
-
-    startWalkLoop(fighterId, runId, speedMultiplier);
-    setFighterArenaPosition(fighterId, to, durationMs);
-    await wait(durationMs);
-
-    if (disposed || runId !== currentRun) return;
-
-    stopWalkLoop(fighterId);
-    setFighterArenaPosition(fighterId, to, 0);
-  }
-
-  async function moveFightersForEvent(event: BattleEvent, runId: number): Promise<void> {
-    const { movement } = event;
-    const moves = [
-      moveFighterTo(
-        event.attackerId,
-        movement.attackerFrom,
-        movement.attackerTo,
-        movement.attackerDurationMs,
-        runId,
-        movement.rush,
-      ),
-    ];
-
-    if (
-      movement.defenderDurationMs > 0 ||
-      getPointDistance(movement.defenderFrom, movement.defenderTo) >= UI_MIN_MOVEMENT_DISTANCE
-    ) {
-      moves.push(
-        moveFighterTo(
-          event.defenderId,
-          movement.defenderFrom,
-          movement.defenderTo,
-          movement.defenderDurationMs,
-          runId,
-          movement.defenderRush,
-        ),
-      );
-    }
-
-    await Promise.all(moves);
-  }
-
-  function playDefenseReaction(
-    fighterId: string,
-    outcome: DefenseOutcome,
-  ): Promise<void> {
-    const skeleton = skeletons.get(fighterId);
-    const clip = defenseClipMap[getFighterClassId(fighterId)]?.[outcome];
-
-    return skeleton && clip ? skeleton.play(clip) : Promise.resolve();
-  }
-
-  function setHandNetVisible(fighterId: string, visible: boolean): void {
-    const net = overlay.querySelector<SVGGElement>(
-      `#arena-svg-${fighterId} [data-bone="net"]`,
-    );
-
-    if (net) {
-      net.style.opacity = visible ? "" : "0";
-      net.style.pointerEvents = visible ? "" : "none";
-    }
-  }
-
-  function resetAllHandNets(): void {
-    for (const fighter of runtimeFighters) {
-      if (fighter.classId === "retiarius") {
-        setHandNetVisible(fighter.id, true);
-      }
-    }
-  }
-
-  function setHandJavelinCount(
-    fighterId: string,
-    count: number,
-    options: { handReady?: boolean } = {},
-  ): void {
-    const clamped = Math.max(0, Math.min(VELES_STARTING_JAVELINS, count));
-    const handReady = options.handReady ?? clamped > 0;
-    const hand = overlay.querySelector<SVGGElement>(
-      `#arena-svg-${fighterId} [data-javelin-hand="true"]`,
-    );
-    const reserveTwo = overlay.querySelector<SVGGElement>(
-      `#arena-svg-${fighterId} [data-javelin-reserve="2"]`,
-    );
-    const reserveThree = overlay.querySelector<SVGGElement>(
-      `#arena-svg-${fighterId} [data-javelin-reserve="3"]`,
-    );
-
-    if (hand) {
-      hand.style.opacity = handReady && clamped >= 1 ? "" : "0";
-      hand.style.pointerEvents = handReady && clamped >= 1 ? "" : "none";
-    }
-
-    if (reserveTwo) {
-      reserveTwo.style.opacity = clamped >= (handReady ? 2 : 1) ? "" : "0";
-    }
-
-    if (reserveThree) {
-      reserveThree.style.opacity = clamped >= (handReady ? 3 : 2) ? "" : "0";
-    }
-
-    javelinCounts.set(fighterId, clamped);
-  }
-
-  function resetAllHandJavelins(): void {
-    for (const fighter of runtimeFighters) {
-      if (fighter.classId === "veles") {
-        setHandJavelinCount(fighter.id, VELES_STARTING_JAVELINS);
-      }
-    }
-  }
-
-  type StagePoint = { x: number; y: number };
-  type FighterStageAnchor = "throw" | "javelinThrow" | "body" | "evade" | "ground";
-
-  function getFighterStagePoint(
-    fighterId: string,
-    anchor: FighterStageAnchor,
-  ): StagePoint {
-    const stageRect = stageEl.getBoundingClientRect();
-    const fighterEl = getFighterElement(fighterId);
-
-    if (!fighterEl) {
-      return { x: stageRect.width / 2, y: stageRect.height / 2 };
-    }
-
-    const fighterRect = fighterEl.getBoundingClientRect();
-    const side = fighterEl.dataset["side"] === "left" ? "left" : "right";
-    const x = fighterRect.left - stageRect.left;
-    const y = fighterRect.top - stageRect.top;
-
-    if (anchor === "throw") {
-      return {
-        x: x + fighterRect.width * (side === "left" ? 0.72 : 0.28),
-        y: y + fighterRect.height * 0.62,
-      };
-    }
-
-    if (anchor === "javelinThrow") {
-      return {
-        x: x + fighterRect.width * (side === "left" ? 0.68 : 0.32),
-        y: y + fighterRect.height * 0.36,
-      };
-    }
-
-    if (anchor === "evade") {
-      return {
-        x: x + fighterRect.width * (side === "left" ? 0.08 : 0.92),
-        y: y + fighterRect.height * 0.54,
-      };
-    }
-
-    if (anchor === "ground") {
-      return {
-        x: x + fighterRect.width * 0.5,
-        y: y + fighterRect.height * 0.9,
-      };
-    }
-
-    return {
-      x: x + fighterRect.width * 0.5,
-      y: y + fighterRect.height * 0.55,
-    };
-  }
-
-  function getElementStageCenter(element: HTMLElement): StagePoint {
-    const stageRect = stageEl.getBoundingClientRect();
-    const rect = element.getBoundingClientRect();
-
-    return {
-      x: rect.left - stageRect.left + rect.width / 2,
-      y: rect.top - stageRect.top + rect.height / 2,
-    };
-  }
-
-  function getArenaWorldPointFromStagePoint(point: StagePoint): StagePoint {
-    const stageRect = stageEl.getBoundingClientRect();
-    const worldRect = arenaWorldEl.getBoundingClientRect();
-    const scaleX =
-      arenaWorldEl.offsetWidth > 0 ? worldRect.width / arenaWorldEl.offsetWidth : arenaCameraState.zoom;
-    const scaleY =
-      arenaWorldEl.offsetHeight > 0 ? worldRect.height / arenaWorldEl.offsetHeight : arenaCameraState.zoom;
-
-    return {
-      x: (stageRect.left + point.x - worldRect.left) / Math.max(0.001, scaleX),
-      y: (stageRect.top + point.y - worldRect.top) / Math.max(0.001, scaleY),
-    };
-  }
-
-  function getFighterArenaWorldPoint(
-    fighterId: string,
-    anchor: FighterStageAnchor,
-  ): StagePoint {
-    return getArenaWorldPointFromStagePoint(getFighterStagePoint(fighterId, anchor));
-  }
-
-  function getElementArenaWorldCenter(element: HTMLElement): StagePoint {
-    return getArenaWorldPointFromStagePoint(getElementStageCenter(element));
-  }
-
-  function createNetElement(className: string): HTMLDivElement {
-    const net = document.createElement("div");
-    net.className = `combat-net ${className}`;
-    return net;
-  }
-
-  function setStageNetTransform(
-    net: HTMLElement,
-    point: StagePoint,
-    rotationDeg: number,
-    scale: number,
-  ): void {
-    net.style.transform = `translate(${point.x}px, ${point.y}px) translate(-50%, -50%) rotate(${rotationDeg}deg) scale(${scale})`;
-  }
-
-  async function flyNetToTarget(event: BattleEvent, runId: number): Promise<HTMLElement | null> {
-    const net = createNetElement("stage-net flying-net");
-    const start = getFighterArenaWorldPoint(event.attackerId, "throw");
-    const end = getFighterArenaWorldPoint(
-      event.defenderId,
-      event.netTrap?.escaped ? "evade" : "body",
-    );
-
-    arenaWorldEl.appendChild(net);
-    const attackerSide = runtimeFighters.find((fighter) => fighter.id === event.attackerId)?.teamId;
-    setStageNetTransform(net, start, attackerSide === "right" ? -18 : 18, 0.58);
-    void net.offsetWidth;
-    net.classList.add("is-flying");
-    setStageNetTransform(
-      net,
-      end,
-      event.netTrap?.escaped ? 28 : -8,
-      event.netTrap?.escaped ? 0.86 : 1.08,
-    );
-
-    await wait(NET_FLIGHT_MS);
-
-    if (disposed || runId !== currentRun) {
-      net.remove();
-      return null;
-    }
-
-    return net;
-  }
-
-  async function dropStageNet(
-    net: HTMLElement,
-    groundPoint: StagePoint,
-    runId: number,
-  ): Promise<void> {
-    net.classList.remove("flying-net", "caught-net");
-    net.classList.add("fallen-net");
-    void net.offsetWidth;
-    setStageNetTransform(net, groundPoint, 14, 0.76);
-
-    await wait(NET_DROP_MS);
-
-    if (disposed || runId !== currentRun) {
-      net.remove();
-      return;
-    }
-
-    net.classList.add("is-on-ground");
-  }
-
-  function attachCaughtNet(fighterId: string): void {
-    const fighterEl = getFighterElement(fighterId);
-
-    if (!fighterEl) {
-      return;
-    }
-
-    fighterEl.querySelector<HTMLElement>(".caught-net")?.remove();
-    fighterEl.appendChild(createNetElement("caught-net"));
-  }
-
-  function scheduleNetRelease(fighterId: string, holdMs: number, runId: number): void {
-    void (async () => {
-      await wait(holdMs);
-
-      if (disposed || runId !== currentRun) return;
-
-      const fighterEl = getFighterElement(fighterId);
-      const caughtNet = fighterEl?.querySelector<HTMLElement>(".caught-net");
-      const start = caughtNet
-        ? getElementArenaWorldCenter(caughtNet)
-        : getFighterArenaWorldPoint(fighterId, "body");
-      const fallingNet = createNetElement("stage-net fallen-net");
-
-      caughtNet?.remove();
-      fighterEl?.classList.remove("is-netted");
-      arenaWorldEl.appendChild(fallingNet);
-      setStageNetTransform(fallingNet, start, -6, 1);
-      void fallingNet.offsetWidth;
-      await dropStageNet(fallingNet, getFighterArenaWorldPoint(fighterId, "ground"), runId);
-    })();
-  }
-
-  function createJavelinElement(className: string): HTMLDivElement {
-    const javelin = document.createElement("div");
-    javelin.className = `combat-javelin ${className}`;
-    return javelin;
-  }
-
-  function getPointAngleDeg(from: StagePoint, to: StagePoint): number {
-    return (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
-  }
-
-  function setStageJavelinTransform(
-    javelin: HTMLElement,
-    point: StagePoint,
-    rotationDeg: number,
-    scale: number,
-  ): void {
-    javelin.style.transform = `translate(${point.x}px, ${point.y}px) translate(-50%, -50%) rotate(${rotationDeg}deg) scale(${scale})`;
-  }
-
-  function getJavelinReleaseDelayMs(clipDuration: number, impactDelayMs: number): number {
-    return Math.round(
-      clampNumber(
-        impactDelayMs - JAVELIN_FLIGHT_MS,
-        clipDuration * JAVELIN_RELEASE_MIN_FRACTION,
-        clipDuration * JAVELIN_RELEASE_MAX_FRACTION,
-      ),
-    );
-  }
-
-  async function flyJavelinToTarget(
-    event: BattleEvent,
-    runId: number,
-    flightMs: number,
-  ): Promise<HTMLElement | null> {
-    const javelin = createJavelinElement("stage-javelin flying-javelin");
-    const start = getFighterArenaWorldPoint(event.attackerId, "javelinThrow");
-    const end = getFighterArenaWorldPoint(event.defenderId, "body");
-    const angle = getPointAngleDeg(start, end);
-
-    arenaWorldEl.appendChild(javelin);
-    javelin.style.setProperty("--javelin-flight-ms", `${Math.max(180, flightMs)}ms`);
-    javelin.style.setProperty("--javelin-flight-easing", "linear");
-    setStageJavelinTransform(javelin, start, angle, 0.72);
-    void javelin.offsetWidth;
-    javelin.classList.add("is-flying");
-    setStageJavelinTransform(javelin, end, angle, 0.82);
-
-    await wait(flightMs);
-
-    if (disposed || runId !== currentRun) {
-      javelin.remove();
-      return null;
-    }
-
-    return javelin;
-  }
-
-  function getJavelinMissExitPoint(
-    start: StagePoint,
-    evade: StagePoint,
-    flightMs: number,
-  ): StagePoint {
-    const exitRatio = JAVELIN_EXIT_MS / Math.max(180, flightMs);
-
-    return {
-      x: evade.x + (evade.x - start.x) * exitRatio,
-      y: evade.y + (evade.y - start.y) * exitRatio,
-    };
-  }
-
-  async function flyJavelinPastMiss(
-    event: BattleEvent,
-    runId: number,
-    flightMs: number,
-  ): Promise<HTMLElement | null> {
-    const javelin = createJavelinElement("stage-javelin flying-javelin");
-    const start = getFighterArenaWorldPoint(event.attackerId, "javelinThrow");
-    const evade = getFighterArenaWorldPoint(event.defenderId, "evade");
-    const exit = getJavelinMissExitPoint(start, evade, flightMs);
-    const angle = getPointAngleDeg(start, evade);
-    const totalFlightMs = Math.max(180, flightMs) + JAVELIN_EXIT_MS;
-
-    arenaWorldEl.appendChild(javelin);
-    javelin.style.setProperty("--javelin-flight-ms", `${totalFlightMs}ms`);
-    javelin.style.setProperty("--javelin-flight-easing", "linear");
-    setStageJavelinTransform(javelin, start, angle, 0.72);
-    void javelin.offsetWidth;
-    javelin.classList.add("is-flying");
-    setStageJavelinTransform(javelin, exit, angle, 0.82);
-
-    await wait(flightMs);
-
-    if (disposed || runId !== currentRun) {
-      javelin.remove();
-      return null;
-    }
-
-    return javelin;
-  }
-
-  async function removeEscapedJavelinAfterExit(
-    javelin: HTMLElement,
-    runId: number,
-  ): Promise<void> {
-    await wait(JAVELIN_EXIT_MS);
-
-    if (disposed || runId !== currentRun) {
-      javelin.remove();
-      return;
-    }
-
-    javelin.remove();
-  }
-
-  async function dropStageJavelin(
-    javelin: HTMLElement,
-    groundPoint: StagePoint,
-    runId: number,
-  ): Promise<void> {
-    javelin.classList.remove("flying-javelin", "escaped-javelin");
-    javelin.classList.add("fallen-javelin");
-    void javelin.offsetWidth;
-    setStageJavelinTransform(javelin, groundPoint, -18 + Math.random() * 36, 0.7);
-
-    await wait(JAVELIN_DROP_MS);
-
-    if (disposed || runId !== currentRun) {
-      javelin.remove();
-      return;
-    }
-
-    javelin.classList.add("is-on-ground");
-  }
-
-  function resetArenaNets(): void {
-    overlay.querySelectorAll<HTMLElement>(".combat-net, .combat-javelin").forEach((throwable) => {
-      throwable.remove();
-    });
-    resetAllHandNets();
-    resetAllHandJavelins();
-  }
+  const {
+    appendLog,
+    disableNettedFighter,
+    isEventBlockedByDefeat,
+    markFighterDefeated,
+    recordCrowdReaction,
+    resetArenaNets,
+    resetCrowdReactionCounters,
+    resetFighterClasses,
+    setHandJavelinCount,
+    setHandNetVisible,
+    setHealth,
+    showFloatingText,
+    updateFatigueVisuals,
+  } = createBattleArenaUi({
+    battleAudio,
+    defeatedFighters,
+    getArenaSvg,
+    getFighterElement,
+    getRuntimeFighters: () => runtimeFighters,
+    javelinCounts,
+    logEl,
+    overlay,
+    skeletons,
+    stopWalkLoop,
+  });
+
+  const throwables = createBattleThrowables({
+    stageEl,
+    arenaWorldEl,
+    getRuntimeFighters: () => runtimeFighters,
+    getArenaCameraZoom: () => arenaCamera.getState().zoom,
+    getFighterElement,
+    wait,
+    isRunActive: (runId) => !disposed && runId === currentRun,
+  });
 
   function clearBattleFinale(): void {
-    stageEl.querySelectorAll<HTMLElement>(".battle-finale, .confetti-layer").forEach((item) => {
-      item.remove();
-    });
+    clearBattleFinaleElements(stageEl);
   }
 
   function resetToInitialState(): void {
@@ -2715,51 +597,6 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     }
   }
 
-  function disableNettedFighter(fighterId: string): void {
-    const fighterEl = getFighterElement(fighterId);
-    const fighterSvg = getArenaSvg(fighterId);
-
-    stopWalkLoop(fighterId);
-    skeletons.get(fighterId)?.stop();
-    fighterSvg?.classList.remove("attacking");
-    fighterEl?.classList.remove(
-      "is-walking",
-      "is-rushing",
-      "is-attacking",
-      "is-interrupted",
-      "is-hit",
-      "is-critical-hit",
-      "is-blocking",
-      "is-evading",
-    );
-  }
-
-  function setHealth(id: string, hp: number, maxHp: number): void {
-    const fills = overlay.querySelectorAll<HTMLElement>(`[data-health-fill="${id}"]`);
-    const texts = overlay.querySelectorAll<HTMLElement>(`[data-health-text="${id}"]`);
-    const compactTexts = overlay.querySelectorAll<HTMLElement>(`[data-health-compact="${id}"]`);
-    const percentTexts = overlay.querySelectorAll<HTMLElement>(`[data-health-percent="${id}"]`);
-    const currentHp = Math.max(0, Math.ceil(hp));
-    const percent = maxHp > 0 ? clampPercent((hp / maxHp) * 100) : 0;
-
-    fills.forEach((fill) => {
-      fill.style.width = `${percent}%`;
-      fill.dataset["danger"] = percent <= 28 ? "true" : "false";
-    });
-
-    texts.forEach((text) => {
-      text.textContent = `${currentHp} / ${maxHp} HP`;
-    });
-
-    compactTexts.forEach((text) => {
-      text.textContent = `${currentHp} HP`;
-    });
-
-    percentTexts.forEach((text) => {
-      text.textContent = `${Math.round(percent)}%`;
-    });
-  }
-
   function getCurrentGladiators(): readonly RuntimeGladiator[] {
     return runtimeFighters;
   }
@@ -2786,74 +623,6 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     );
   }
 
-  function resetCrowdReactionCounters(): void {
-    successfulHitStreaks.clear();
-    successfulDodgeStreaks.clear();
-
-    for (const fighter of runtimeFighters) {
-      successfulHitStreaks.set(fighter.id, 0);
-      successfulDodgeStreaks.set(fighter.id, 0);
-    }
-  }
-
-  function resetFighterHitStreak(fighterId: string): void {
-    successfulHitStreaks.set(fighterId, 0);
-  }
-
-  function recordSuccessfulHit(fighterId: string): void {
-    const nextStreak = (successfulHitStreaks.get(fighterId) ?? 0) + 1;
-    successfulHitStreaks.set(fighterId, nextStreak);
-
-    if (nextStreak === 2) {
-      void battleAudio.playApplause("low");
-    } else if (nextStreak === 3) {
-      void battleAudio.playApplause("high");
-    }
-  }
-
-  function resetFighterDodgeStreak(fighterId: string): void {
-    successfulDodgeStreaks.set(fighterId, 0);
-  }
-
-  function recordSuccessfulDodge(fighterId: string, forceApplause: boolean): void {
-    const nextStreak = (successfulDodgeStreaks.get(fighterId) ?? 0) + 1;
-    successfulDodgeStreaks.set(fighterId, nextStreak);
-
-    if (forceApplause || nextStreak === 2) {
-      void battleAudio.playApplause("medium");
-    }
-  }
-
-  function recordCrowdReaction(event: BattleEvent): void {
-    if (event.actionType === "strike" || event.actionType === "javelin") {
-      if (event.outcome === "hit") {
-        recordSuccessfulHit(event.attackerId);
-        resetFighterDodgeStreak(event.defenderId);
-        return;
-      }
-
-      resetFighterHitStreak(event.attackerId);
-
-      if (event.outcome === "miss") {
-        recordSuccessfulDodge(event.defenderId, false);
-      } else {
-        resetFighterDodgeStreak(event.defenderId);
-      }
-
-      return;
-    }
-
-    if (event.actionType === "net" && event.netTrap) {
-      resetFighterHitStreak(event.attackerId);
-
-      if (event.netTrap.escaped) {
-        recordSuccessfulDodge(event.defenderId, true);
-      } else {
-        resetFighterDodgeStreak(event.defenderId);
-      }
-    }
-  }
-
   function syncBattleButtonState(): void {
     const ready = canStartBattle();
     const showPreserveSettingsButton = isBattleComplete && !isBattlePlaying;
@@ -2861,6 +630,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     setBattleResultsButtonEnabled(isBattlePlaying && activeBattlePlan !== null);
     preserveSettingsButton.hidden = !showPreserveSettingsButton;
     preserveSettingsButton.disabled = !showPreserveSettingsButton;
+    battleSeedInput.disabled = isBattlePlaying;
 
     if (isBattlePlaying) {
       setBattleButtonsState(true, "Йде бій");
@@ -2899,34 +669,6 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     syncBattleButtonState();
   }
 
-  function resetFighterClasses(): void {
-    overlay.querySelectorAll<HTMLElement>(".battle-fighter").forEach((fighter) => {
-      const fighterId = fighter.dataset["fighter"];
-      if (fighterId) {
-        stopWalkLoop(fighterId);
-      }
-
-      fighter.classList.remove(
-        "is-attacking",
-        "is-interrupted",
-        "is-winded",
-        "is-walking",
-        "is-rushing",
-        "is-hit",
-        "is-critical-hit",
-        "is-blocking",
-        "is-evading",
-        "is-netted",
-        "is-victorious",
-        "is-defeated",
-      );
-    });
-
-    overlay.querySelectorAll<HTMLElement>(".battle-team-panel").forEach((panel) => {
-      panel.classList.remove("is-winded", "is-victorious", "is-defeated");
-    });
-  }
-
   function resetBattleUi(plan: BattlePlan): void {
     defeatedFighters.clear();
     resetCrowdReactionCounters();
@@ -2949,1179 +691,182 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     }
   }
 
-  function showFloatingText(
-    fighterId: string,
-    text: string,
-    variant: FloatingVariant,
-  ): void {
-    const floatEl = overlay.querySelector<HTMLElement>(`[data-float="${fighterId}"]`);
-    if (!floatEl) return;
-
-    floatEl.className = "floating-damage";
-    floatEl.textContent = text;
-    void floatEl.offsetWidth;
-    floatEl.classList.add("show", `floating-${variant}`);
-  }
-
-  function appendLog(event: BattleEvent): void {
-    const row = document.createElement("div");
-    row.className = `battle-log-row battle-log-${
-      event.actionType === "javelin" ? "javelin" : event.netTrap ? "net" : event.outcome
-    }`;
-    const counterText = event.counterAttack
-      ? ` · зірвав ${getGladiatorName(event.counterAttack.attackerId)}`
-      : "";
-    const windedNames = event.fatigue
-      .filter((snapshot) => snapshot.winded)
-      .map((snapshot) => getGladiatorName(snapshot.fighterId));
-    const fatigueText = windedNames.length > 0 ? ` · віддих: ${windedNames.join(", ")}` : "";
-    const attackerDecision = event.decisions.find(
-      (decision) => decision.fighterId === event.attackerId,
-    );
-    const defenderDecision = event.decisions.find(
-      (decision) => decision.fighterId === event.defenderId,
-    );
-    const tacticText =
-      attackerDecision && defenderDecision
-        ? ` · план: ${getTacticText(attackerDecision.tactic)} / ${getTacticText(
-            defenderDecision.tactic,
-          )}`
-        : "";
-    row.textContent = `${(event.timeMs / 1_000).toFixed(1)} с · ${getGladiatorName(
-      event.attackerId,
-    )}: ${event.attackName}${counterText} · ${getOutcomeText(event)}${tacticText}${fatigueText}`;
-    logEl.prepend(row);
-    updateFatigueVisuals(event);
-
-    while (logEl.children.length > 6) {
-      logEl.lastElementChild?.remove();
-    }
-  }
-
-  function updateFatigueVisuals(event: BattleEvent): void {
-    for (const fighter of runtimeFighters) {
-      getFighterElement(fighter.id)?.classList.remove("is-winded");
-    }
-
-    const teamWinded: Record<TeamId, boolean> = { left: false, right: false };
-    for (const snapshot of event.fatigue) {
-      if (snapshot.winded) {
-        getFighterElement(snapshot.fighterId)?.classList.add("is-winded");
-        const fighter = runtimeFighters.find((item) => item.id === snapshot.fighterId);
-        if (fighter) {
-          teamWinded[fighter.teamId] = true;
-        }
-      }
-    }
-
-    for (const teamId of TEAM_IDS) {
-      overlay
-        .querySelector<HTMLElement>(`[data-team-panel="${teamId}"]`)
-        ?.classList.toggle("is-winded", teamWinded[teamId]);
-    }
-  }
-
-  function startAttackAnimation(
-    fighterId: string,
-    attackCssClass: string,
-  ): AttackPlayback | null {
-    const element = getFighterElement(fighterId);
-    const svg = getArenaSvg(fighterId);
-    const clip = clipMap[attackCssClass];
-    const skeleton = skeletons.get(fighterId);
-    const durationMs = clip?.duration ?? Math.round(560 * ACTION_MOTION_SCALE);
-
-    if (!element) {
-      return null;
-    }
-
-    element.style.setProperty("--transform-duration", `${ATTACK_TRANSFORM_MS}ms`);
-    element.classList.add("is-attacking");
-    svg?.classList.add("attacking");
-
-    return {
-      element,
-      svg,
-      skeleton,
-      animation: skeleton && clip ? skeleton.play(clip) : Promise.resolve(),
-      durationMs,
-    };
-  }
-
-  function finishAttackAnimation(playback: AttackPlayback | null): void {
-    if (!playback) {
-      return;
-    }
-
-    playback.svg?.classList.remove("attacking");
-    playback.element.classList.remove("is-attacking", "is-interrupted");
-  }
-
-  function resolveStrikeImpact(plan: BattlePlan, event: BattleEvent): Promise<void> {
-    const defenderEl = getFighterElement(event.defenderId);
-
-    if (!defenderEl) {
-      return Promise.resolve();
-    }
-
-    battleAudio.playAttack(event.attackCssClass);
-
-    if (event.outcome === "hit") {
-      const defender = getPlanFighter(plan, event.defenderId);
-      recordCrowdReaction(event);
-      if (event.damage > 0) {
-        battleAudio.playBlood();
-      }
-      defenderEl.classList.add(event.critical ? "is-critical-hit" : "is-hit");
-      setHealth(event.defenderId, event.defenderHp, defender.maxHp);
-      showFloatingText(
-        event.defenderId,
-        event.critical ? `-${event.damage}!` : `-${event.damage}`,
-        "hit",
-      );
-
-      if (event.defenderHp <= 0) {
-        markFighterDefeated(event.defenderId);
-      }
-
-      return Promise.resolve();
-    }
-
-    defenderEl.classList.add(event.outcome === "block" ? "is-blocking" : "is-evading");
-    recordCrowdReaction(event);
-    if (event.outcome === "block") {
-      battleAudio.playBlock(getFighterClassId(event.defenderId));
-    }
-    showFloatingText(
-      event.defenderId,
-      event.outcome === "block" ? "Блок" : "Ухил",
-      event.outcome,
-    );
-    return playDefenseReaction(event.defenderId, event.outcome);
-  }
-
-  function interruptCounterAttack(counterAttack: BattleCounterAttack): void {
-    if (!counterAttack.canceled) {
-      return;
-    }
-
-    const counterEl = getFighterElement(counterAttack.attackerId);
-    const counterSvg = getArenaSvg(counterAttack.attackerId);
-
-    counterEl?.classList.add("is-interrupted");
-    counterEl?.classList.remove("is-attacking");
-    counterSvg?.classList.remove("attacking");
-    skeletons.get(counterAttack.attackerId)?.stop();
-    showFloatingText(counterAttack.attackerId, "Зірвано", "interrupt");
-  }
-
-  async function playNetThrowEvent(
-    event: BattleEvent,
-    runId: number,
-  ): Promise<void> {
-    const netTrap = event.netTrap;
-    const attackerEl = getFighterElement(event.attackerId);
-    const defenderEl = getFighterElement(event.defenderId);
-    const attackerSvg = getArenaSvg(event.attackerId);
-    const clip = clipMap[event.attackCssClass];
-    const skeleton = skeletons.get(event.attackerId);
-    const clipDuration = clip?.duration ?? Math.round(620 * ACTION_MOTION_SCALE);
-
-    if (!netTrap || !attackerEl || !defenderEl) return;
-    if (isEventBlockedByDefeat(event)) return;
-
-    attackerEl.style.setProperty("--transform-duration", `${ATTACK_TRANSFORM_MS}ms`);
-    attackerEl.classList.add("is-attacking");
-    attackerSvg?.classList.add("attacking");
-    const animation = skeleton && clip ? skeleton.play(clip) : Promise.resolve();
-    let defenseAnimation: Promise<void> = Promise.resolve();
-    const finishNetThrow = (): void => {
-      attackerSvg?.classList.remove("attacking");
-      attackerEl.classList.remove("is-attacking");
-      skeleton?.stop();
-    };
-
-    await wait(Math.round(clipDuration * 0.38));
-    if (disposed || runId !== currentRun) return;
-    if (isEventBlockedByDefeat(event)) {
-      finishNetThrow();
-      return;
-    }
-
-    battleAudio.playAttack(event.attackCssClass);
-    setHandNetVisible(event.attackerId, false);
-    const flyingNet = await flyNetToTarget(event, runId);
-    if (!flyingNet || disposed || runId !== currentRun) {
-      finishNetThrow();
-      return;
-    }
-
-    if (netTrap.escaped) {
-      defenderEl.classList.add("is-evading");
-      recordCrowdReaction(event);
-      defenseAnimation = playDefenseReaction(event.defenderId, "miss");
-      showFloatingText(event.defenderId, "Ухил", "miss");
-      appendLog(event);
-      void dropStageNet(flyingNet, getFighterArenaWorldPoint(event.defenderId, "ground"), runId);
-    } else {
-      recordCrowdReaction(event);
-      disableNettedFighter(event.defenderId);
-      flyingNet.remove();
-      attachCaughtNet(event.defenderId);
-      defenderEl.classList.add("is-netted");
-      showFloatingText(event.defenderId, formatDuration(netTrap.durationMs), "net");
-      appendLog(event);
-      scheduleNetRelease(
-        event.defenderId,
-        Math.max(NET_DROP_MS, netTrap.durationMs - Math.round(clipDuration * 0.38) - NET_FLIGHT_MS),
-        runId,
-      );
-    }
-
-    await wait(Math.round(clipDuration * 0.22));
-    await Promise.all([animation, defenseAnimation]);
-    if (disposed || runId !== currentRun) return;
-
-    finishNetThrow();
-
-    await wait(REACTION_SETTLE_MS);
-    if (disposed || runId !== currentRun) return;
-    defenderEl.classList.remove("is-evading");
-  }
-
-  async function playJavelinThrowEvent(
-    plan: BattlePlan,
-    event: BattleEvent,
-    runId: number,
-  ): Promise<void> {
-    const attackerEl = getFighterElement(event.attackerId);
-    const defenderEl = getFighterElement(event.defenderId);
-    const attackerSvg = getArenaSvg(event.attackerId);
-    const clip = clipMap[event.attackCssClass];
-    const skeleton = skeletons.get(event.attackerId);
-    const clipDuration = clip?.duration ?? Math.round(720 * ACTION_MOTION_SCALE);
-    const releaseDelayMs = getJavelinReleaseDelayMs(clipDuration, event.impactDelayMs);
-    const flightMs = Math.max(180, event.impactDelayMs - releaseDelayMs);
-
-    if (!attackerEl || !defenderEl) return;
-    if (isEventBlockedByDefeat(event)) return;
-
-    attackerEl.style.setProperty("--transform-duration", `${ATTACK_TRANSFORM_MS}ms`);
-    attackerEl.classList.add("is-attacking");
-    attackerSvg?.classList.add("attacking");
-    const animation = skeleton && clip ? skeleton.play(clip) : Promise.resolve();
-    let defenseAnimation: Promise<void> = Promise.resolve();
-    let remainingAfterRelease: number | null = null;
-    const finishJavelinThrow = (): void => {
-      attackerSvg?.classList.remove("attacking");
-      attackerEl.classList.remove("is-attacking");
-      skeleton?.stop();
-
-      if (remainingAfterRelease !== null && !disposed && runId === currentRun) {
-        setHandJavelinCount(event.attackerId, remainingAfterRelease);
-      }
-    };
-
-    await wait(releaseDelayMs);
-    if (disposed || runId !== currentRun) return;
-    if (isEventBlockedByDefeat(event)) {
-      finishJavelinThrow();
-      return;
-    }
-
-    battleAudio.playAttack(event.attackCssClass);
-    const remaining = Math.max(
-      0,
-      (javelinCounts.get(event.attackerId) ?? VELES_STARTING_JAVELINS) - 1,
-    );
-    remainingAfterRelease = remaining;
-    setHandJavelinCount(event.attackerId, remaining, { handReady: false });
-    const flyingJavelin =
-      event.outcome === "miss"
-        ? await flyJavelinPastMiss(event, runId, flightMs)
-        : await flyJavelinToTarget(event, runId, flightMs);
-    if (!flyingJavelin || disposed || runId !== currentRun) {
-      finishJavelinThrow();
-      return;
-    }
-
-    if (event.outcome === "hit") {
-      const defender = getPlanFighter(plan, event.defenderId);
-      recordCrowdReaction(event);
-      if (event.damage > 0) {
-        battleAudio.playBlood();
-      }
-      defenderEl.classList.add(event.critical ? "is-critical-hit" : "is-hit");
-      setHealth(event.defenderId, event.defenderHp, defender.maxHp);
-      showFloatingText(
-        event.defenderId,
-        event.critical ? `-${event.damage}!` : `-${event.damage}`,
-        "hit",
-      );
-
-      if (event.defenderHp <= 0) {
-        markFighterDefeated(event.defenderId);
-      }
-
-      appendLog(event);
-      void dropStageJavelin(
-        flyingJavelin,
-        getFighterArenaWorldPoint(event.defenderId, "ground"),
-        runId,
-      );
-    } else if (event.outcome === "block") {
-      defenderEl.classList.add("is-blocking");
-      recordCrowdReaction(event);
-      battleAudio.playBlock(getFighterClassId(event.defenderId));
-      defenseAnimation = playDefenseReaction(event.defenderId, "block");
-      showFloatingText(event.defenderId, "Блок", "block");
-      appendLog(event);
-      void dropStageJavelin(
-        flyingJavelin,
-        getFighterArenaWorldPoint(event.defenderId, "ground"),
-        runId,
-      );
-    } else {
-      defenderEl.classList.add("is-evading");
-      recordCrowdReaction(event);
-      defenseAnimation = playDefenseReaction(event.defenderId, "miss");
-      showFloatingText(event.defenderId, "Ухил", "miss");
-      appendLog(event);
-      void removeEscapedJavelinAfterExit(flyingJavelin, runId);
-    }
-
-    await wait(Math.max(0, clipDuration - event.impactDelayMs));
-    await Promise.all([animation, defenseAnimation]);
-    if (disposed || runId !== currentRun) return;
-
-    finishJavelinThrow();
-
-    await wait(REACTION_SETTLE_MS);
-    if (disposed || runId !== currentRun) return;
-    defenderEl.classList.remove("is-hit", "is-critical-hit", "is-blocking", "is-evading");
-  }
-
-  async function playStrikeEvent(
-    plan: BattlePlan,
-    event: BattleEvent,
-    runId: number,
-  ): Promise<void> {
-    const defenderEl = getFighterElement(event.defenderId);
-    const attack = startAttackAnimation(event.attackerId, event.attackCssClass);
-
-    if (!attack || !defenderEl) return;
-    if (isEventBlockedByDefeat(event)) {
-      finishAttackAnimation(attack);
-      return;
-    }
-
-    await wait(event.impactDelayMs);
-    if (disposed || runId !== currentRun) return;
-    if (isEventBlockedByDefeat(event)) {
-      finishAttackAnimation(attack);
-      return;
-    }
-
-    const defenseAnimation = resolveStrikeImpact(plan, event);
-    appendLog(event);
-
-    await wait(Math.max(0, attack.durationMs - event.impactDelayMs));
-    await Promise.all([attack.animation, defenseAnimation]);
-    if (disposed || runId !== currentRun) return;
-
-    finishAttackAnimation(attack);
-
-    await wait(REACTION_SETTLE_MS);
-    if (disposed || runId !== currentRun) return;
-    defenderEl.classList.remove("is-hit", "is-critical-hit", "is-blocking", "is-evading");
-  }
-
-  async function playContestedStrikeEvent(
-    plan: BattlePlan,
-    event: BattleEvent,
-    runId: number,
-  ): Promise<void> {
-    const defenderEl = getFighterElement(event.defenderId);
-    const attack = startAttackAnimation(event.attackerId, event.attackCssClass);
-    const counterAttack = event.counterAttack;
-    const counter = counterAttack
-      ? startAttackAnimation(counterAttack.attackerId, counterAttack.attackCssClass)
-      : null;
-
-    if (!attack || !counterAttack || !defenderEl) return;
-    if (isEventBlockedByDefeat(event)) {
-      finishAttackAnimation(attack);
-      finishAttackAnimation(counter);
-      return;
-    }
-
-    await wait(event.impactDelayMs);
-    if (disposed || runId !== currentRun) return;
-    if (isEventBlockedByDefeat(event)) {
-      finishAttackAnimation(attack);
-      finishAttackAnimation(counter);
-      return;
-    }
-
-    interruptCounterAttack(counterAttack);
-    const defenseAnimation = resolveStrikeImpact(plan, event);
-    appendLog(event);
-
-    const counterImpactMs = counterAttack.impactDelayMs;
-    const recoveryMs = Math.max(
-      360,
-      Math.min(920, Math.max(attack.durationMs, counterImpactMs) - event.impactDelayMs + 260),
-    );
-    await wait(recoveryMs);
-    await Promise.all([attack.animation, defenseAnimation]);
-    if (disposed || runId !== currentRun) return;
-
-    finishAttackAnimation(attack);
-    finishAttackAnimation(counter);
-
-    await wait(REACTION_SETTLE_MS);
-    if (disposed || runId !== currentRun) return;
-    defenderEl.classList.remove("is-hit", "is-critical-hit", "is-blocking", "is-evading");
-    getFighterElement(counterAttack.attackerId)?.classList.remove(
-      "is-hit",
-      "is-critical-hit",
-      "is-blocking",
-      "is-evading",
-      "is-interrupted",
-    );
-  }
-
-  async function playBattleEvent(
-    plan: BattlePlan,
-    event: BattleEvent,
-    runId: number,
-  ): Promise<void> {
-    if (isEventBlockedByDefeat(event)) return;
-
-    await moveFightersForEvent(event, runId);
-    if (disposed || runId !== currentRun) return;
-    if (isEventBlockedByDefeat(event)) return;
-
-    if (event.actionType === "move" || event.actionType === "recover") {
-      updateFatigueVisuals(event);
-      return;
-    }
-
-    if (event.netTrap) {
-      await playNetThrowEvent(event, runId);
-      return;
-    }
-
-    if (event.actionType === "javelin") {
-      await playJavelinThrowEvent(plan, event, runId);
-      return;
-    }
-
-    if (event.counterAttack) {
-      await playContestedStrikeEvent(plan, event, runId);
-      return;
-    }
-
-    await playStrikeEvent(plan, event, runId);
-  }
-
-  function appendResultMetric(parent: HTMLElement, label: string, value: string): void {
-    const metric = document.createElement("div");
-    metric.className = "battle-result-metric";
-
-    const labelEl = document.createElement("span");
-    labelEl.textContent = label;
-
-    const valueEl = document.createElement("strong");
-    valueEl.textContent = value;
-
-    metric.append(labelEl, valueEl);
-    parent.append(metric);
-  }
-
-  function getTeamDamage(plan: BattlePlan, stats: BattleResultStats, teamId: BattleTeamId): number {
-    let total = 0;
-    for (const fighterId of Object.keys(plan.fighters)) {
-      if (plan.teams[fighterId] === teamId) {
-        total += stats.damageByFighter[fighterId] ?? 0;
-      }
-    }
-    return total;
-  }
-
-  function getTeamSurvivors(
-    plan: BattlePlan,
-    stats: BattleResultStats,
-    teamId: BattleTeamId,
-  ): { alive: number; total: number } {
-    let alive = 0;
-    let total = 0;
-    for (const fighterId of Object.keys(plan.fighters)) {
-      if (plan.teams[fighterId] === teamId) {
-        total += 1;
-        if ((stats.finalHpByFighter[fighterId] ?? 0) > 0) {
-          alive += 1;
-        }
-      }
-    }
-    return { alive, total };
-  }
-
-  function renderBattleResult(plan: BattlePlan, stats: BattleResultStats): void {
-    const winnerLabel = TEAM_LABELS[plan.winnerTeamId];
-    const loserLabel = TEAM_LABELS[plan.loserTeamId];
-    const winnerSurvivors = getTeamSurvivors(plan, stats, plan.winnerTeamId);
-    const loserSurvivors = getTeamSurvivors(plan, stats, plan.loserTeamId);
-    const resultTitle = document.createElement("strong");
-    const resultDetails = document.createElement("span");
-    const resultMetrics = document.createElement("div");
-
-    resultEl.replaceChildren();
-    resultEl.classList.add("is-final");
-
-    resultTitle.className = "battle-result-title";
-    resultTitle.textContent = `Перемога: ${winnerLabel}`;
-
-    resultDetails.className = "battle-result-details";
-    resultDetails.textContent = `${winnerLabel}: ${winnerSurvivors.alive}/${winnerSurvivors.total} вижило. ${loserLabel}: ${loserSurvivors.alive}/${loserSurvivors.total} вижило.`;
-
-    resultMetrics.className = "battle-result-metrics";
-    appendResultMetric(resultMetrics, "Тривалість", formatDuration(plan.durationMs));
-    appendResultMetric(resultMetrics, "Дій", String(stats.totalActions));
-    appendResultMetric(resultMetrics, "Влучань", `${stats.hits}/${stats.combatActions}`);
-    appendResultMetric(
-      resultMetrics,
-      "Списи",
-      `${stats.javelinHits} / ${stats.javelinBlocks} / ${stats.javelinDodges}`,
-    );
-    appendResultMetric(
-      resultMetrics,
-      "Шкода",
-      `${getTeamDamage(plan, stats, plan.winnerTeamId)} / ${getTeamDamage(plan, stats, plan.loserTeamId)} HP`,
-    );
-
-    resultEl.append(resultTitle, resultDetails, resultMetrics);
-  }
-
-  function launchConfetti(): void {
-    const layer = document.createElement("div");
-    const colors = ["#f0c040", "#e64d4d", "#40c080", "#60c0f0", "#f7f0d2", "#b66ef0"];
-    const fallDistance = Math.max(stageEl.clientHeight + 96, 520);
-
-    layer.className = "confetti-layer";
-    layer.setAttribute("aria-hidden", "true");
-
-    for (let i = 0; i < 96; i += 1) {
-      const piece = document.createElement("i");
-      const color = colors[i % colors.length] ?? "#f0c040";
-      const left = Math.random() * 100;
-      const drift = Math.round((Math.random() - 0.5) * 260);
-      const rotate = Math.round(360 + Math.random() * 920);
-      const delay = Math.round(Math.random() * 520);
-      const duration = Math.round(2_700 + Math.random() * 1_850);
-      const width = Math.round(6 + Math.random() * 7);
-      const height = Math.round(9 + Math.random() * 12);
-
-      piece.className = "confetti-piece";
-      piece.style.left = `${left.toFixed(2)}%`;
-      piece.style.setProperty("--confetti-color", color);
-      piece.style.setProperty("--confetti-drift", `${drift}px`);
-      piece.style.setProperty("--confetti-rotate", `${rotate}deg`);
-      piece.style.setProperty("--confetti-delay", `${delay}ms`);
-      piece.style.setProperty("--confetti-duration", `${duration}ms`);
-      piece.style.setProperty("--confetti-width", `${width}px`);
-      piece.style.setProperty("--confetti-height", `${height}px`);
-      piece.style.setProperty("--confetti-fall", `${fallDistance}px`);
-      layer.appendChild(piece);
-    }
-
-    stageEl.appendChild(layer);
-
-    const timer = window.setTimeout(() => {
-      timers.delete(timer);
-      layer.remove();
-    }, 6_200);
-    timers.set(timer, null);
-  }
-
-  function showBattleFinale(plan: BattlePlan, stats: BattleResultStats): void {
-    const winnerLabel = TEAM_LABELS[plan.winnerTeamId];
-    const loserLabel = TEAM_LABELS[plan.loserTeamId];
-    const winnerSurvivors = getTeamSurvivors(plan, stats, plan.winnerTeamId);
-    const loserSurvivors = getTeamSurvivors(plan, stats, plan.loserTeamId);
-    const finale = document.createElement("div");
-    const kicker = document.createElement("p");
-    const title = document.createElement("h2");
-    const subtitle = document.createElement("p");
-    const metrics = document.createElement("div");
-    const actions = document.createElement("div");
-    const newBattleButton = document.createElement("button");
-    const resultsButton = document.createElement("button");
-    const saveSettingsButton = document.createElement("button");
-
-    clearBattleFinale();
-
-    finale.className = "battle-finale";
-    finale.setAttribute("role", "status");
-    finale.setAttribute("aria-live", "polite");
-
-    kicker.className = "battle-finale-kicker";
-    kicker.textContent = "Результати бою";
-
-    title.className = "battle-finale-title";
-    title.textContent = `${winnerLabel} перемагає`;
-
-    subtitle.className = "battle-finale-subtitle";
-    subtitle.textContent = `${loserLabel} падає після ${formatDuration(plan.durationMs)}. Вижило ${winnerSurvivors.alive}/${winnerSurvivors.total} проти ${loserSurvivors.alive}/${loserSurvivors.total}.`;
-
-    metrics.className = "battle-finale-metrics";
-    appendResultMetric(metrics, "Усього дій", String(stats.totalActions));
-    appendResultMetric(metrics, "Влучань", `${stats.hits}/${stats.combatActions}`);
-    appendResultMetric(metrics, "Критів", String(stats.criticals));
-    appendResultMetric(metrics, "Захист", `${stats.blocks} блоків, ${stats.misses} ухилень`);
-    appendResultMetric(
-      metrics,
-      "Списи",
-      `${stats.javelinHits} влуч., ${stats.javelinBlocks} блок., ${stats.javelinDodges} ухил.`,
-    );
-    appendResultMetric(
-      metrics,
-      "Сітка",
-      `${stats.successfulNets} вдалих, ${stats.escapedNets} уникнено`,
-    );
-    appendResultMetric(
-      metrics,
-      "Шкода",
-      `${getTeamDamage(plan, stats, plan.winnerTeamId)} / ${getTeamDamage(plan, stats, plan.loserTeamId)} HP`,
-    );
-
-    actions.className = "battle-finale-actions";
-
-    resultsButton.className = "battle-finale-button battle-finale-button-secondary";
-    resultsButton.type = "button";
-    resultsButton.dataset["viewResults"] = "true";
-    resultsButton.textContent = "Глянути результати";
-
-    newBattleButton.className = "battle-finale-button battle-finale-button-primary";
-    newBattleButton.type = "button";
-    newBattleButton.dataset["newBattle"] = "true";
-    newBattleButton.textContent = "Новий бій";
-
-    saveSettingsButton.className = "battle-finale-button battle-finale-button-save";
-    saveSettingsButton.type = "button";
-    saveSettingsButton.dataset["preserveSettings"] = "true";
-    saveSettingsButton.textContent = SAVE_BATTLE_SETUP_LABEL;
-
-    resultsButton.textContent = "Глянути поле бою";
-    newBattleButton.textContent = "Новий бій";
-
-    resultsButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      clearBattleFinale();
-    });
-
-    newBattleButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      void handleBattleClick();
-    });
-
-    saveSettingsButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      prepareNextBattleWithCurrentSettings();
-    });
-
-    actions.append(resultsButton, saveSettingsButton, newBattleButton);
-    finale.append(kicker, title, subtitle, metrics, actions);
-    stageEl.appendChild(finale);
-    launchConfetti();
-  }
-
-  function applyBattlePlanInstantly(plan: BattlePlan): void {
-    const javelinsThrownByFighter = new Map<string, number>();
-
-    resetFighterClasses();
-    resetArenaNets();
-    logEl.replaceChildren();
-
-    for (const fighterId of Object.keys(plan.fighters)) {
-      const fighter = getPlanFighter(plan, fighterId);
-      const startPosition = plan.startPositions[fighterId];
-
-      if (startPosition) {
-        setFighterArenaPosition(fighterId, startPosition, 0);
-      }
-
-      setHealth(fighterId, fighter.maxHp, fighter.maxHp);
-    }
-
-    for (const event of getBattleEventsByResolution(plan)) {
-      setFighterArenaPosition(event.attackerId, event.movement.attackerTo, 0);
-      setFighterArenaPosition(event.defenderId, event.movement.defenderTo, 0);
-      updateFatigueVisuals(event);
-
-      if (event.actionType === "javelin") {
-        const used = (javelinsThrownByFighter.get(event.attackerId) ?? 0) + 1;
-        javelinsThrownByFighter.set(event.attackerId, used);
-        setHandJavelinCount(event.attackerId, VELES_STARTING_JAVELINS - used);
-      }
-
-      if (event.netTrap) {
-        setHandNetVisible(event.attackerId, false);
-      }
-
-      if (event.outcome === "hit") {
-        setHealth(
-          event.defenderId,
-          event.defenderHp,
-          getPlanFighter(plan, event.defenderId).maxHp,
-        );
-      }
-
-      if (isCombatEvent(event)) {
-        appendLog(event);
-      }
-    }
-  }
-
-  function finishBattle(plan: BattlePlan): void {
-    const stats = createBattleResultStats(plan);
-
-    overlay
-      .querySelector<HTMLElement>(`[data-team-panel="${plan.winnerTeamId}"]`)
-      ?.classList.add("is-victorious");
-    overlay
-      .querySelector<HTMLElement>(`[data-team-panel="${plan.loserTeamId}"]`)
-      ?.classList.add("is-defeated");
-
-    for (const fighterId of Object.keys(plan.fighters)) {
-      const finalHp = stats.finalHpByFighter[fighterId] ?? 0;
-      const fighter = getPlanFighter(plan, fighterId);
-      const teamId = plan.teams[fighterId];
-      const fighterEl = getFighterElement(fighterId);
-
-      setHealth(fighterId, finalHp, fighter.maxHp);
-
-      if (finalHp <= 0) {
-        markFighterDefeated(fighterId);
-        fighterEl?.classList.add("is-defeated");
-      } else if (teamId === plan.winnerTeamId) {
-        fighterEl?.classList.add("is-victorious");
-        overlay
-          .querySelector<HTMLElement>(`[data-team-fighter="${fighterId}"]`)
-          ?.classList.add("is-victorious");
-      }
-    }
-
-    statusEl.textContent = "Бій завершено.";
-    renderBattleResult(plan, stats);
-    showBattleFinale(plan, stats);
-    battleAudio.playFinaleAndStop();
-    isBattleComplete = true;
-    isBattlePlaying = false;
-    activeBattlePlan = null;
-    syncBattleButtonState();
-  }
-
-  function showBattleResultsNow(): void {
-    const plan = activeBattlePlan;
-
-    if (!isBattlePlaying || !plan) {
-      return;
-    }
-
-    currentRun += 1;
-    clearPendingTimers(true);
-    battleAudio.stopAll();
-    isBattlePlaying = false;
-    applyBattlePlanInstantly(plan);
-    finishBattle(plan);
-  }
-
-  async function handleBattleClick(): Promise<void> {
-    if (isBattlePlaying) return;
-
-    if (isBattleComplete) {
-      resetToInitialState();
-      return;
-    }
-
-    if (!canStartBattle()) {
-      syncBattleButtonState();
-      return;
-    }
-
-    const teams = buildTeamMap(getActiveRoster());
-    const plan = createBattlePlan(getCurrentGladiators(), teams, currentSpawnPositions);
-    const runId = currentRun + 1;
-    currentRun = runId;
-    isBattlePlaying = true;
-    activeBattlePlan = plan;
-    syncBattleButtonState();
-    resetBattleUi(plan);
-    battleAudio.startBattle();
-
-    try {
-      await wait(420);
-      if (disposed || runId !== currentRun) return;
-
-      const startedAt = performance.now();
-      const playbackTasks = plan.events.map(async (event) => {
-        const waitForEvent = event.timeMs - (performance.now() - startedAt);
-        if (waitForEvent > 0) {
-          await wait(waitForEvent);
-        }
-
-        if (disposed || runId !== currentRun) return;
-        await playBattleEvent(plan, event, runId);
-      });
-
-      const waitForFinish = plan.durationMs - (performance.now() - startedAt);
-      if (waitForFinish > 0) {
-        playbackTasks.push(wait(waitForFinish));
-      }
-
-      await Promise.all(playbackTasks);
-
-      if (!disposed && runId === currentRun) {
-        finishBattle(plan);
-      }
-    } finally {
-      if (!disposed && runId === currentRun) {
-        isBattlePlaying = false;
-        activeBattlePlan = null;
-        syncBattleButtonState();
-      }
-    }
-  }
-
-  const onBattleClick = (): void => {
-    void handleBattleClick();
+  const battleEventPlayback = createBattleEventPlayback({
+    battleAudio,
+    disableNettedFighter,
+    appendLog,
+    getArenaSvg,
+    getFighterClassId,
+    getFighterElement,
+    isEventBlockedByDefeat,
+    isRunActive: (runId) => !disposed && runId === currentRun,
+    javelinCounts,
+    markFighterDefeated,
+    recordCrowdReaction,
+    setFighterArenaPosition,
+    setHandJavelinCount,
+    setHandNetVisible,
+    setHealth,
+    showFloatingText,
+    skeletons,
+    stopWalkLoop,
+    throwables,
+    updateFatigueVisuals,
+    wait,
+    walkTokens,
+  });
+
+  const battleLifecycleState: BattleLifecycleState = {
+    get activeBattlePlan() {
+      return activeBattlePlan;
+    },
+    set activeBattlePlan(value) {
+      activeBattlePlan = value;
+    },
+    get currentRun() {
+      return currentRun;
+    },
+    set currentRun(value) {
+      currentRun = value;
+    },
+    get disposed() {
+      return disposed;
+    },
+    set disposed(value) {
+      disposed = value;
+    },
+    get isBattleComplete() {
+      return isBattleComplete;
+    },
+    set isBattleComplete(value) {
+      isBattleComplete = value;
+    },
+    get isBattlePlaying() {
+      return isBattlePlaying;
+    },
+    set isBattlePlaying(value) {
+      isBattlePlaying = value;
+    },
   };
 
-  const onBattleResultsClick = (): void => {
-    showBattleResultsNow();
+  const {
+    handleBattleClick,
+    showBattleResultsNow,
+  } = createBattleLifecycleController({
+    appendLog,
+    battleAudio,
+    battleEventPlayback,
+    battleSeedInput,
+    canStartBattle,
+    clearPendingTimers,
+    createCurrentBattleReplaySetup,
+    getActiveRoster,
+    getCurrentGladiators,
+    getCurrentSpawnPositions: () => currentSpawnPositions,
+    getFighterElement,
+    getRequestedBattleSeed,
+    logEl,
+    markFighterDefeated,
+    overlay,
+    prepareNextBattleWithCurrentSettings,
+    resetArenaNets,
+    resetBattleUi,
+    resetBattleUiClasses: resetFighterClasses,
+    resetToInitialState,
+    restoreBattleReplaySetup,
+    resultEl,
+    setFighterArenaPosition,
+    setHandJavelinCount,
+    setHandNetVisible,
+    setHealth,
+    stageEl,
+    state: battleLifecycleState,
+    statusEl,
+    syncBattleButtonState,
+    timers,
+    updateFatigueVisuals,
+    wait,
+  });
+
+  const interactionState: ShowcaseInteractionState = {
+    get activeManualSlotId() {
+      return activeManualSlotId;
+    },
+    set activeManualSlotId(value) {
+      activeManualSlotId = value;
+    },
+    get draggingPlacementSlotId() {
+      return draggingPlacementSlotId;
+    },
+    set draggingPlacementSlotId(value) {
+      draggingPlacementSlotId = value;
+    },
+    get isBattleComplete() {
+      return isBattleComplete;
+    },
+    set isBattleComplete(value) {
+      isBattleComplete = value;
+    },
+    get isBattlePlaying() {
+      return isBattlePlaying;
+    },
+    set isBattlePlaying(value) {
+      isBattlePlaying = value;
+    },
+    get openClassPickerSlotId() {
+      return openClassPickerSlotId;
+    },
+    set openClassPickerSlotId(value) {
+      openClassPickerSlotId = value;
+    },
+    get selectedPlacementSlotId() {
+      return selectedPlacementSlotId;
+    },
+    set selectedPlacementSlotId(value) {
+      selectedPlacementSlotId = value;
+    },
+    get trainingMode() {
+      return trainingMode;
+    },
+    set trainingMode(value) {
+      trainingMode = value;
+    },
   };
 
-  const clearPlacementDragOver = (): void => {
-    overlay.querySelectorAll<HTMLElement>(".placement-cell.is-drag-over").forEach((cell) => {
-      cell.classList.remove("is-drag-over");
-    });
-  };
-
-  const onPlacementDragStart = (event: DragEvent): void => {
-    if (trainingMode !== "manual" || isBattlePlaying || isBattleComplete) {
-      return;
-    }
-
-    const target = event.target instanceof Element ? event.target : null;
-    const token = target?.closest<HTMLElement>("[data-placement-token]");
-    const slotId = token?.dataset["placementToken"];
-    const slot = slotId ? findManualSlot(slotId) : undefined;
-
-    if (!slotId || !slot) {
-      return;
-    }
-
-    draggingPlacementSlotId = slotId;
-    selectedPlacementSlotId = slotId;
-    activeManualSlotId = slotId;
-    openClassPickerSlotId = null;
-    token.classList.add("is-dragging");
-    event.dataTransfer?.setData("text/plain", slotId);
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-    }
-  };
-
-  const onPlacementDragEnd = (): void => {
-    draggingPlacementSlotId = null;
-    clearPlacementDragOver();
-    overlay.querySelectorAll<HTMLElement>("[data-placement-token].is-dragging").forEach((token) => {
-      token.classList.remove("is-dragging");
-    });
-  };
-
-  const onPlacementDragOver = (event: DragEvent): void => {
-    if (trainingMode !== "manual" || isBattlePlaying || isBattleComplete) {
-      return;
-    }
-
-    const target = event.target instanceof Element ? event.target : null;
-    const cellEl = target?.closest<HTMLElement>("[data-placement-cell]");
-    const cellData = cellEl ? getPlacementCellData(cellEl) : null;
-    const slotId = draggingPlacementSlotId ?? event.dataTransfer?.getData("text/plain") ?? "";
-    const slot = slotId ? findManualSlot(slotId) : undefined;
-
-    if (!cellEl || !cellData || !slot || slot.teamId !== cellData.teamId) {
-      return;
-    }
-
-    event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "move";
-    }
-    cellEl.classList.add("is-drag-over");
-  };
-
-  const onPlacementDragLeave = (event: DragEvent): void => {
-    const target = event.target instanceof Element ? event.target : null;
-    const cellEl = target?.closest<HTMLElement>("[data-placement-cell]");
-    const related = event.relatedTarget instanceof Node ? event.relatedTarget : null;
-
-    if (cellEl && (!related || !cellEl.contains(related))) {
-      cellEl.classList.remove("is-drag-over");
-    }
-  };
-
-  const onPlacementDrop = (event: DragEvent): void => {
-    if (trainingMode !== "manual" || isBattlePlaying || isBattleComplete) {
-      return;
-    }
-
-    const target = event.target instanceof Element ? event.target : null;
-    const cellEl = target?.closest<HTMLElement>("[data-placement-cell]");
-    const cellData = cellEl ? getPlacementCellData(cellEl) : null;
-    const slotId = draggingPlacementSlotId ?? event.dataTransfer?.getData("text/plain") ?? "";
-
-    if (!cellData || !slotId) {
-      return;
-    }
-
-    event.preventDefault();
-    clearPlacementDragOver();
-
-    if (placeManualSlotInCell(slotId, cellData.teamId, cellData.cell)) {
-      refreshTrainingUi();
-    }
-  };
-
-  const onTrainingClick = (event: MouseEvent): void => {
-    const target = event.target instanceof Element ? event.target : null;
-
-    if (target?.closest("[data-gladiator-types-open]")) {
-      setGladiatorTypesModalOpen(true);
-      return;
-    }
-
-    if (target?.closest("[data-gladiator-types-close]") || target === typesModal) {
-      setGladiatorTypesModalOpen(false);
-      return;
-    }
-
-    if (!typesModal.hidden) {
-      return;
-    }
-
-    if (isBattlePlaying) {
-      return;
-    }
-
-    if (target?.closest("[data-preserve-settings]")) {
-      prepareNextBattleWithCurrentSettings();
-      return;
-    }
-
-    if (target?.closest("[data-new-battle]")) {
-      void handleBattleClick();
-      return;
-    }
-
-    if (target?.closest("[data-view-results]")) {
-      clearBattleFinale();
-      return;
-    }
-
-    if (isBattleComplete) {
-      return;
-    }
-
-    const shouldCloseClassPicker =
-      trainingMode === "manual" &&
-      openClassPickerSlotId !== null &&
-      !target?.closest("[data-class-picker]");
-
-    const modeButton = target?.closest<HTMLButtonElement>("[data-training-mode]");
-
-    if (modeButton) {
-      const nextMode = modeButton.dataset["trainingMode"];
-      if (nextMode === "auto" || nextMode === "manual") {
-        trainingMode = nextMode;
-        openClassPickerSlotId = null;
-        selectedPlacementSlotId = null;
-        draggingPlacementSlotId = null;
-        refreshTrainingUi();
-      }
-      return;
-    }
-
-    const placementAutoButton = target?.closest<HTMLButtonElement>("[data-placement-auto-team]");
-    if (placementAutoButton && trainingMode === "manual") {
-      const teamId = parseTeamId(placementAutoButton.dataset["placementAutoTeam"]);
-      if (teamId) {
-        openClassPickerSlotId = null;
-        clearManualTeamPlacements(teamId);
-        refreshTrainingUi();
-      }
-      return;
-    }
-
-    const placementClearButton = target?.closest<HTMLButtonElement>("[data-placement-clear]");
-    if (placementClearButton && trainingMode === "manual") {
-      const slotId = placementClearButton.dataset["placementClear"];
-      if (slotId) {
-        openClassPickerSlotId = null;
-        clearManualSpawnPlacement(slotId);
-        refreshTrainingUi();
-      }
-      return;
-    }
-
-    const placementToken = target?.closest<HTMLElement>("[data-placement-token]");
-    if (placementToken && trainingMode === "manual") {
-      const slotId = placementToken.dataset["placementToken"];
-      if (slotId && findManualSlot(slotId)) {
-        selectedPlacementSlotId = selectedPlacementSlotId === slotId ? null : slotId;
-        activeManualSlotId = slotId;
-        openClassPickerSlotId = null;
-        renderTrainingBody();
-      }
-      return;
-    }
-
-    const placementCell = target?.closest<HTMLElement>("[data-placement-cell]");
-    if (placementCell && trainingMode === "manual") {
-      const cellData = getPlacementCellData(placementCell);
-      if (cellData && selectedPlacementSlotId) {
-        if (placeManualSlotInCell(selectedPlacementSlotId, cellData.teamId, cellData.cell)) {
-          refreshTrainingUi();
-        }
-      }
-      return;
-    }
-
-    const manualSlotButton = target?.closest<HTMLButtonElement>("[data-manual-slot-select]");
-    if (manualSlotButton && trainingMode === "manual") {
-      activeManualSlotId = manualSlotButton.dataset["manualSlotSelect"] ?? activeManualSlotId;
-      openClassPickerSlotId = null;
-      renderTrainingBody();
-      return;
-    }
-
-    const classPickerButton = target?.closest<HTMLButtonElement>("[data-class-picker-button]");
-    if (classPickerButton && trainingMode === "manual") {
-      const slotId = classPickerButton.dataset["classPickerButton"];
-      if (slotId) {
-        activeManualSlotId = slotId;
-        openClassPickerSlotId = openClassPickerSlotId === slotId ? null : slotId;
-        renderTrainingBody();
-      }
-      return;
-    }
-
-    const classOptionButton = target?.closest<HTMLButtonElement>("[data-slot-class-option]");
-    if (classOptionButton && trainingMode === "manual") {
-      const slotId = classOptionButton.dataset["slotClassOption"];
-      const classId = classOptionButton.dataset["classId"];
-      const slot = slotId ? findManualSlot(slotId) : undefined;
-      if (!slotId || !slot || !classId) {
-        return;
-      }
-
-      activeManualSlotId = slotId;
-      openClassPickerSlotId = null;
-      setActiveManualRoster(setSlotClass(manualRoster, slot.teamId, slot.teamSlot, classId));
-      refreshTrainingUi();
-      return;
-    }
-
-    const pointButton = target?.closest<HTMLButtonElement>("[data-point-action]");
-    if (!pointButton || trainingMode !== "manual") {
-      if (shouldCloseClassPicker) {
-        openClassPickerSlotId = null;
-        renderTrainingBody();
-      }
-      return;
-    }
-
-    openClassPickerSlotId = null;
-
-    const slotId = pointButton.dataset["gladiator"];
-    const stat = pointButton.dataset["stat"];
-    const action = pointButton.dataset["pointAction"];
-
-    if (!slotId || !isGladiatorStatKey(stat)) {
-      return;
-    }
-
-    const slot = findManualSlot(slotId);
-    if (!slot) {
-      return;
-    }
-
-    const remaining = getManualRemainingPoints(slotId);
-
-    if (action === "increase" && remaining > 0) {
-      slot.manualBonusPoints[stat] += 1;
-    } else if (action === "decrease" && slot.manualBonusPoints[stat] > 0) {
-      slot.manualBonusPoints[stat] -= 1;
-    }
-
-    refreshTrainingUi();
-  };
-
-  const onShowcaseKeydown = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && !typesModal.hidden) {
-      setGladiatorTypesModalOpen(false);
-      return;
-    }
-
-    if (event.key === "Escape" && openClassPickerSlotId) {
-      openClassPickerSlotId = null;
-      renderTrainingBody();
-    }
-  };
-
-  function findRosterSlotForActiveMode(slotId: string): RosterSlot | undefined {
-    return getAllSlots(getActiveRoster()).find((slot) => slot.instanceId === slotId);
-  }
-
-  const onTrainingChange = (event: Event): void => {
-    if (isBattlePlaying || isBattleComplete) {
-      return;
-    }
-
-    const target = event.target;
-
-    if (target instanceof HTMLInputElement) {
-      if (target.dataset["levelInput"]) {
-        const slotId = target.dataset["levelInput"];
-        const slot = findRosterSlotForActiveMode(slotId);
-        if (!slot) {
-          return;
-        }
-        slot.level = clampGladiatorLevel(Number(target.value));
-        target.value = String(slot.level);
-        clampManualBonusPoints(slot);
-        refreshTrainingUi();
-        return;
-      }
-
-      if (target.dataset["teamSizeInput"]) {
-        if (trainingMode !== "manual") {
-          return;
-        }
-        const teamId = target.dataset["teamSizeInput"] as TeamId;
-        const requested = Number(target.value);
-        const fallbackClassId =
-          manualRoster[teamId][manualRoster[teamId].length - 1]?.classId ??
-          getSortedGladiatorClasses()[0]!.id;
-        setActiveManualRoster(setTeamSize(manualRoster, teamId, requested, fallbackClassId));
-        getActiveManualSlot();
-        refreshTrainingUi();
-        return;
-      }
-    }
-  };
+  const {
+    onBattleClick,
+    onBattleResultsClick,
+    onPlacementDragStart,
+    onPlacementDragEnd,
+    onPlacementDragOver,
+    onPlacementDragLeave,
+    onPlacementDrop,
+    onTrainingClick,
+    onShowcaseKeydown,
+    onTrainingChange,
+  } = createShowcaseInteractionHandlers({
+    clearBattleFinale,
+    clearManualSpawnPlacement,
+    clearManualTeamPlacements,
+    findManualSlot,
+    getActiveManualSlot,
+    getActiveRoster,
+    getManualRemainingPoints,
+    getManualRoster: () => manualRoster,
+    getPlacementCellData,
+    handleBattleClick,
+    overlay,
+    parseTeamId,
+    placeManualSlotInCell,
+    prepareNextBattleWithCurrentSettings,
+    refreshTrainingUi,
+    renderTrainingBody,
+    setActiveManualRoster,
+    setGladiatorTypesModalOpen,
+    showBattleResultsNow,
+    state: interactionState,
+    typesModal,
+  });
 
   battleButtons.forEach((button) => {
     button.addEventListener("click", onBattleClick);
@@ -4167,14 +912,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     overlay.removeEventListener("drop", onPlacementDrop);
     window.removeEventListener("resize", onArenaResize);
     window.removeEventListener("keydown", onShowcaseKeydown);
-    if (arenaCameraUpdateFrame !== 0) {
-      window.cancelAnimationFrame(arenaCameraUpdateFrame);
-      arenaCameraUpdateFrame = 0;
-    }
-    if (arenaCameraAnimationFrame !== 0) {
-      window.cancelAnimationFrame(arenaCameraAnimationFrame);
-      arenaCameraAnimationFrame = 0;
-    }
+    arenaCamera.dispose();
     clearPendingTimers(false);
     battleAudio.stopAll();
     for (const skeleton of skeletons.values()) skeleton.dispose();
