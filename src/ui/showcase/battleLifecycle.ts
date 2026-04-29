@@ -34,6 +34,7 @@ export interface BattleLifecycleContext {
   battleAudio: BattleAudioController;
   battleEventPlayback: BattleEventPlaybackController;
   battleSeedInput: HTMLInputElement;
+  battleSeedMatchValueEl: HTMLElement;
   canStartBattle: () => boolean;
   clearPendingTimers: (resolveWaits: boolean) => void;
   createCurrentBattleReplaySetup: () => BattleReplaySetup;
@@ -70,6 +71,7 @@ export function createBattleLifecycleController({
   battleAudio,
   battleEventPlayback,
   battleSeedInput,
+  battleSeedMatchValueEl,
   canStartBattle,
   clearPendingTimers,
   createCurrentBattleReplaySetup,
@@ -194,6 +196,8 @@ export function createBattleLifecycleController({
     }
 
     statusEl.textContent = "Бій завершено.";
+    battleSeedMatchValueEl.textContent = plan.seed;
+    battleSeedInput.value = "";
     renderBattleResult(plan, stats);
     showBattleFinale(plan, stats);
     battleAudio.playFinaleAndStop();
@@ -224,6 +228,7 @@ export function createBattleLifecycleController({
     state.isBattlePlaying = true;
     state.activeBattlePlan = plan;
     syncBattleButtonState();
+    battleSeedMatchValueEl.textContent = "-";
     resetBattleUi(plan);
     battleAudio.startBattle();
 

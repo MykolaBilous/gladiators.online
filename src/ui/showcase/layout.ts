@@ -13,6 +13,7 @@ export interface ShowcaseElements {
   volumeSliders: HTMLInputElement[];
   preserveSettingsButton: HTMLButtonElement;
   battleSeedInput: HTMLInputElement;
+  battleSeedMatchValueEl: HTMLElement;
   statusEl: HTMLElement;
   resultEl: HTMLElement;
   logEl: HTMLElement;
@@ -115,6 +116,10 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
                 spellcheck="false"
               />
             </label>
+            <div class="battle-seed-match" data-battle-seed-match aria-live="polite">
+              <span>Seed матчу</span>
+              <strong data-battle-seed-match-value>-</strong>
+            </div>
             <button class="battle-button battle-button--stage" type="button" data-battle-button>Розпочати бій</button>
             <button class="battle-results-button battle-results-button--stage" type="button" data-battle-results-button disabled>Переглянути результати</button>
             <button class="battle-preserve-button battle-preserve-button--stage" type="button" data-preserve-settings hidden>${SAVE_BATTLE_SETUP_LABEL}</button>
@@ -206,6 +211,7 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
   );
   const preserveSettingsButtonCandidate = overlay.querySelector<HTMLButtonElement>("[data-preserve-settings]");
   const battleSeedInputCandidate = overlay.querySelector<HTMLInputElement>("[data-battle-seed-input]");
+  const battleSeedMatchValueCandidate = overlay.querySelector<HTMLElement>("[data-battle-seed-match-value]");
   const statusCandidate = overlay.querySelector<HTMLElement>("[data-battle-status]");
   const resultCandidate = overlay.querySelector<HTMLElement>("[data-battle-result]");
   const logCandidate = overlay.querySelector<HTMLElement>("[data-battle-log]");
@@ -221,6 +227,7 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
     battleResultsButtonCandidates.length === 0 ||
     !preserveSettingsButtonCandidate ||
     !battleSeedInputCandidate ||
+    !battleSeedMatchValueCandidate ||
     !statusCandidate ||
     !resultCandidate ||
     !logCandidate ||
@@ -250,6 +257,7 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
     volumeSliders,
     preserveSettingsButton: preserveSettingsButtonCandidate,
     battleSeedInput: battleSeedInputCandidate,
+    battleSeedMatchValueEl: battleSeedMatchValueCandidate,
     statusEl: statusCandidate,
     resultEl: resultCandidate,
     logEl: logCandidate,
