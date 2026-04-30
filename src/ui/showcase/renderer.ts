@@ -1,87 +1,19 @@
-import type { AnimationClip, BoneDef } from "../../animation/skeletonTypes";
 import type { RuntimeGladiator, TeamId } from "@gladiators/combat-sim";
 import { TEAM_LABELS } from "@gladiators/combat-sim";
 import {
   createMurmilloSvg,
-  murmilloBones,
-  murmilloHeavyDodge,
-  murmilloShieldBlock,
-  murmilloShieldBash,
-  murmilloSwordSlash,
-  murmilloWalk,
 } from "../../gladiatorAssets/murmilloSvg";
 import {
   createRetiariusSvg,
-  retiariusBones,
-  retiariusNetThrow,
-  retiariusQuickDodge,
-  retiariusTridentThrust,
-  retiariusTridentParry,
-  retiariusWalk,
 } from "../../gladiatorAssets/retiariusSvg";
 import {
   createVelesSvg,
-  velesBones,
-  velesJavelinThrow,
-  velesQuickDodge,
-  velesShortSwordBlock,
-  velesShortSwordSlash,
-  velesWalk,
 } from "../../gladiatorAssets/velesSvg";
-import type { DefenseOutcome } from "../gladiatorShowcaseTypes";
-import {
-  ACTION_MOTION_SCALE,
-  DEFENSE_MOTION_SCALE,
-  WALK_MOTION_SCALE,
-} from "./playback";
-
-function scaleClip(clip: AnimationClip, scale: number): AnimationClip {
-  return {
-    ...clip,
-    duration: Math.round(clip.duration * scale),
-  };
-}
 
 export const svgMap: Record<string, () => string> = {
   murmillo: createMurmilloSvg,
   retiarius: createRetiariusSvg,
   veles: createVelesSvg,
-};
-
-export const boneMap: Record<string, BoneDef[]> = {
-  murmillo: murmilloBones,
-  retiarius: retiariusBones,
-  veles: velesBones,
-};
-
-export const clipMap: Record<string, AnimationClip> = {
-  "attack-sword-slash": scaleClip(murmilloSwordSlash, ACTION_MOTION_SCALE),
-  "attack-shield-bash": scaleClip(murmilloShieldBash, ACTION_MOTION_SCALE),
-  "attack-trident-thrust": scaleClip(retiariusTridentThrust, ACTION_MOTION_SCALE),
-  "attack-net-throw": scaleClip(retiariusNetThrow, ACTION_MOTION_SCALE),
-  "attack-javelin-throw": scaleClip(velesJavelinThrow, ACTION_MOTION_SCALE),
-  "attack-veles-sword": scaleClip(velesShortSwordSlash, ACTION_MOTION_SCALE),
-};
-
-export const walkClipMap: Record<string, AnimationClip> = {
-  murmillo: scaleClip(murmilloWalk, WALK_MOTION_SCALE),
-  retiarius: scaleClip(retiariusWalk, WALK_MOTION_SCALE),
-  veles: scaleClip(velesWalk, WALK_MOTION_SCALE),
-};
-
-export const defenseClipMap: Record<string, Record<DefenseOutcome, AnimationClip>> = {
-  murmillo: {
-    block: scaleClip(murmilloShieldBlock, DEFENSE_MOTION_SCALE),
-    miss: scaleClip(murmilloHeavyDodge, DEFENSE_MOTION_SCALE),
-  },
-  retiarius: {
-    block: scaleClip(retiariusTridentParry, DEFENSE_MOTION_SCALE),
-    miss: scaleClip(retiariusQuickDodge, DEFENSE_MOTION_SCALE),
-  },
-  veles: {
-    block: scaleClip(velesShortSwordBlock, DEFENSE_MOTION_SCALE),
-    miss: scaleClip(velesQuickDodge, DEFENSE_MOTION_SCALE),
-  },
 };
 export function createTeamFighterRow(fighter: RuntimeGladiator): string {
   return `
@@ -118,20 +50,6 @@ export function createTeamPanel(teamId: TeamId, fighters: readonly RuntimeGladia
     </aside>`;
 }
 
-export function createArenaFighter(fighter: RuntimeGladiator): string {
-  const svg = svgMap[fighter.classId]?.() ?? "";
-
-  return `
-    <article class="battle-fighter" data-fighter="${fighter.id}" data-class="${fighter.classId}" data-side="${fighter.teamId}">
-      <div class="fighter-nameplate">
-        <span class="fighter-tag-name">${fighter.displayName} (${fighter.level})</span>
-        <span class="fighter-tag-hp" data-health-compact="${fighter.id}">${fighter.stats.hp} HP</span>
-      </div>
-      <div class="arena-svg" id="arena-svg-${fighter.id}">
-        <div class="arena-svg-mirror">
-          ${svg}
-        </div>
-      </div>
-      <div class="floating-damage" data-float="${fighter.id}"></div>
-    </article>`;
+export function createArenaFighter(_fighter: RuntimeGladiator): string {
+  return "";
 }

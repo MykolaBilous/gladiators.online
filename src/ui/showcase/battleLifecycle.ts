@@ -5,8 +5,6 @@ import type { BattleEvent, BattlePlan, BattlePoint } from "@gladiators/combat-si
 import { buildTeamMap, type Roster, type RuntimeGladiator } from "@gladiators/combat-sim";
 import type { BattleResultStats } from "../gladiatorShowcaseTypes";
 import type { BattleAudioController } from "./audio";
-import type { BattleEventPlaybackController } from "./battleEventPlayback";
-import { VELES_STARTING_JAVELINS } from "./playback";
 import {
   createBattleResultStats,
   getBattleEventsByResolution,
@@ -29,12 +27,14 @@ export interface BattleLifecycleController {
   showBattleResultsNow: () => void;
 }
 
-export type BattleWindowPlaybackStarter = () => void;
+export interface BattleWindowHandle {
+  startPlayback: () => void;
+  battleComplete: Promise<void>;
+}
 
 export interface BattleLifecycleContext {
   appendLog: (event: BattleEvent) => void;
   battleAudio: BattleAudioController;
-  battleEventPlayback: BattleEventPlaybackController;
   battleSeedInput: HTMLInputElement;
   battleSeedMatchValueEl: HTMLElement;
   canStartBattle: () => boolean;
@@ -43,38 +43,29 @@ export interface BattleLifecycleContext {
   getActiveRoster: () => Roster;
   getCurrentGladiators: () => readonly RuntimeGladiator[];
   getCurrentSpawnPositions: () => Record<string, BattlePoint>;
-  getFighterElement: (fighterId: string) => HTMLElement | null;
   getRequestedBattleSeed: () => string | undefined;
   logEl: HTMLElement;
   markFighterDefeated: (fighterId: string) => void;
   overlay: HTMLElement;
   prepareNextBattleWithCurrentSettings: () => void;
-  playBattleWindow?: (
-    plan: BattlePlan,
-  ) => Promise<BattleWindowPlaybackStarter | void> | BattleWindowPlaybackStarter | void;
-  resetArenaNets: () => void;
+  playBattleWindow?: (plan: BattlePlan) => Promise<BattleWindowHandle>;
   resetBattleUi: (plan: BattlePlan) => void;
   resetBattleUiClasses: () => void;
   resetToInitialState: () => void;
   restoreBattleReplaySetup: (replay: BattleReplayRecord) => void;
   resultEl: HTMLElement;
-  setFighterArenaPosition: (fighterId: string, point: BattlePoint, durationMs?: number) => void;
-  setHandJavelinCount: (fighterId: string, count: number, options?: { handReady?: boolean }) => void;
-  setHandNetVisible: (fighterId: string, visible: boolean) => void;
   setHealth: (fighterId: string, hp: number, maxHp: number) => void;
   stageEl: HTMLElement;
   state: BattleLifecycleState;
   statusEl: HTMLElement;
   syncBattleButtonState: () => void;
   timers: Map<number, (() => void) | null>;
-  updateFatigueVisuals: (event: BattleEvent) => void;
   wait: (ms: number) => Promise<void>;
 }
 
 export function createBattleLifecycleController({
   appendLog,
   battleAudio,
-  battleEventPlayback,
   battleSeedInput,
   battleSeedMatchValueEl,
   canStartBattle,
@@ -83,29 +74,23 @@ export function createBattleLifecycleController({
   getActiveRoster,
   getCurrentGladiators,
   getCurrentSpawnPositions,
-  getFighterElement,
   getRequestedBattleSeed,
   logEl,
   markFighterDefeated,
   overlay,
   prepareNextBattleWithCurrentSettings,
   playBattleWindow,
-  resetArenaNets,
   resetBattleUi,
   resetBattleUiClasses,
   resetToInitialState,
   restoreBattleReplaySetup,
   resultEl,
-  setFighterArenaPosition,
-  setHandJavelinCount,
-  setHandNetVisible,
   setHealth,
   stageEl,
   state,
   statusEl,
   syncBattleButtonState,
   timers,
-  updateFatigueVisuals,
   wait,
 }: BattleLifecycleContext): BattleLifecycleController {
   function renderBattleResult(plan: BattlePlan, stats: BattleResultStats): void {
@@ -126,38 +111,15 @@ export function createBattleLifecycleController({
   }
 
   function applyBattlePlanInstantly(plan: BattlePlan): void {
-    const javelinsThrownByFighter = new Map<string, number>();
-
     resetBattleUiClasses();
-    resetArenaNets();
     logEl.replaceChildren();
 
     for (const fighterId of Object.keys(plan.fighters)) {
       const fighter = getPlanFighter(plan, fighterId);
-      const startPosition = plan.startPositions[fighterId];
-
-      if (startPosition) {
-        setFighterArenaPosition(fighterId, startPosition, 0);
-      }
-
       setHealth(fighterId, fighter.maxHp, fighter.maxHp);
     }
 
     for (const event of getBattleEventsByResolution(plan)) {
-      setFighterArenaPosition(event.attackerId, event.movement.attackerTo, 0);
-      setFighterArenaPosition(event.defenderId, event.movement.defenderTo, 0);
-      updateFatigueVisuals(event);
-
-      if (event.actionType === "javelin") {
-        const used = (javelinsThrownByFighter.get(event.attackerId) ?? 0) + 1;
-        javelinsThrownByFighter.set(event.attackerId, used);
-        setHandJavelinCount(event.attackerId, VELES_STARTING_JAVELINS - used);
-      }
-
-      if (event.netTrap) {
-        setHandNetVisible(event.attackerId, false);
-      }
-
       if (event.outcome === "hit") {
         setHealth(
           event.defenderId,
@@ -186,15 +148,12 @@ export function createBattleLifecycleController({
       const finalHp = stats.finalHpByFighter[fighterId] ?? 0;
       const fighter = getPlanFighter(plan, fighterId);
       const teamId = plan.teams[fighterId];
-      const fighterEl = getFighterElement(fighterId);
 
       setHealth(fighterId, finalHp, fighter.maxHp);
 
       if (finalHp <= 0) {
         markFighterDefeated(fighterId);
-        fighterEl?.classList.add("is-defeated");
       } else if (teamId === plan.winnerTeamId) {
-        fighterEl?.classList.add("is-victorious");
         overlay
           .querySelector<HTMLElement>(`[data-team-fighter="${fighterId}"]`)
           ?.classList.add("is-victorious");
@@ -236,32 +195,15 @@ export function createBattleLifecycleController({
     syncBattleButtonState();
     battleSeedMatchValueEl.textContent = "-";
     resetBattleUi(plan);
-    const startBattleWindow = await playBattleWindow?.(plan);
+    const windowHandle = await playBattleWindow?.(plan);
 
     if (state.disposed || runId !== state.currentRun) return;
 
     try {
       battleAudio.startBattle();
-      if (typeof startBattleWindow === "function") {
-        startBattleWindow();
-      }
-      const startedAt = performance.now();
-      const playbackTasks = plan.events.map(async (event) => {
-        const waitForEvent = event.timeMs - (performance.now() - startedAt);
-        if (waitForEvent > 0) {
-          await wait(waitForEvent);
-        }
+      windowHandle?.startPlayback();
 
-        if (state.disposed || runId !== state.currentRun) return;
-        await battleEventPlayback.playBattleEvent(plan, event, runId);
-      });
-
-      const waitForFinish = plan.durationMs - (performance.now() - startedAt);
-      if (waitForFinish > 0) {
-        playbackTasks.push(wait(waitForFinish));
-      }
-
-      await Promise.all(playbackTasks);
+      await (windowHandle?.battleComplete ?? Promise.resolve());
 
       if (!state.disposed && runId === state.currentRun) {
         finishBattle(plan);

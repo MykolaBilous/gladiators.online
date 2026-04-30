@@ -1,4 +1,4 @@
-import type { BattlePlan } from "@gladiators/combat-sim";
+import type { BattleEvent, BattlePlan } from "@gladiators/combat-sim";
 
 export type PhaserArenaPhase = "boot" | "preload" | "ready" | "playing" | "complete";
 
@@ -25,4 +25,6 @@ export interface ArenaSceneData {
   onControlsReady?: (controls: PhaserArenaControls) => void;
   onHealthChange?: (change: PhaserArenaHealthChange) => void;
   onStatus?: (status: PhaserArenaStatus) => void;
+  onBattleEvent?: (event: BattleEvent, plan: BattlePlan) => void;
+  onBattleComplete?: (plan: BattlePlan) => void;
 }

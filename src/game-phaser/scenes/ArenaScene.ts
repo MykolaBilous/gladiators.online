@@ -333,6 +333,7 @@ export class ArenaScene extends Phaser.Scene {
         message,
         winnerId: plan.winnerId,
       });
+      data.onBattleComplete?.(plan);
     });
   }
 
@@ -468,6 +469,9 @@ export class ArenaScene extends Phaser.Scene {
       phase: "playing",
       message: `${event.attackName}: ${formatEventOutcomeText(event)}`,
     });
+    if (this.battlePlan) {
+      this.arenaData?.onBattleEvent?.(event, this.battlePlan);
+    }
   }
 
   private playNetImpact(
@@ -495,6 +499,9 @@ export class ArenaScene extends Phaser.Scene {
       phase: "playing",
       message: `${event.attackName}: ${formatEventOutcomeText(event)}`,
     });
+    if (this.battlePlan) {
+      this.arenaData?.onBattleEvent?.(event, this.battlePlan);
+    }
   }
 
   private playContactFlash(event: BattleEvent, x: number, y: number): void {
