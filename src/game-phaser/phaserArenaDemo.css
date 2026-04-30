@@ -1,0 +1,467 @@
+.phaser-combat-shell {
+  --combat-border: rgba(238, 243, 249, 0.14);
+  --combat-panel: #0d141e;
+  --combat-panel-soft: rgba(18, 25, 36, 0.82);
+  --combat-text: #eef3f9;
+  --combat-muted: rgba(238, 243, 249, 0.58);
+  --combat-gold: #f0c04a;
+  --combat-gold-dark: #a66d2a;
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #0a1018;
+  color: var(--combat-text);
+}
+
+.phaser-combat-layout {
+  display: grid;
+  grid-template-columns: minmax(172px, 194px) minmax(0, 1fr) minmax(172px, 194px);
+  gap: 12px;
+  width: 100%;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.phaser-team-column,
+.phaser-combat-main {
+  min-width: 0;
+  min-height: 0;
+}
+
+.phaser-combat-main {
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.phaser-combat-actions {
+  display: grid;
+  grid-template-columns:
+    minmax(210px, 260px)
+    minmax(210px, 244px)
+    minmax(180px, 220px)
+    minmax(190px, 220px)
+    minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+}
+
+.phaser-seed-control,
+.phaser-seed-match {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(240, 192, 64, 0.22);
+  border-radius: 0 0 8px 8px;
+  background: rgba(26, 22, 24, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 241, 184, 0.08);
+  color: rgba(238, 243, 249, 0.62);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.phaser-seed-match {
+  align-content: center;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  background: rgba(70, 40, 26, 0.78);
+}
+
+.phaser-seed-match strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff3c4;
+  font-size: 12px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.phaser-seed-input {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid rgba(240, 192, 64, 0.26);
+  border-radius: 6px;
+  background: rgba(8, 10, 14, 0.48);
+  color: #fff3c4;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 9px;
+  outline: none;
+  text-transform: none;
+}
+
+.phaser-seed-input:focus {
+  border-color: rgba(240, 192, 64, 0.62);
+  box-shadow: 0 0 0 2px rgba(240, 192, 64, 0.12);
+}
+
+.phaser-battle-button,
+.phaser-results-button {
+  min-width: 0;
+  min-height: 42px;
+  border-radius: 0 0 8px 8px;
+  font: inherit;
+  font-weight: 900;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.phaser-battle-button {
+  border: 1px solid rgba(240, 192, 64, 0.5);
+  background: linear-gradient(180deg, var(--combat-gold), var(--combat-gold-dark));
+  color: #1a1008;
+  font-size: 16px;
+  box-shadow: 0 12px 24px rgba(189, 119, 43, 0.22);
+}
+
+.phaser-results-button {
+  border: 1px solid rgba(238, 243, 249, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(238, 243, 249, 0.72);
+  font-size: 13px;
+}
+
+.phaser-battle-button:hover:not(:disabled),
+.phaser-results-button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.phaser-battle-button:active:not(:disabled),
+.phaser-results-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.phaser-battle-button:disabled,
+.phaser-results-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.18);
+  opacity: 0.56;
+}
+
+.phaser-arena-frame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(116, 82, 38, 0.62);
+  border-radius: 8px;
+  background: #1b1f27;
+  box-shadow:
+    inset 0 24px 42px rgba(255, 236, 172, 0.08),
+    inset 0 -42px 72px rgba(50, 22, 12, 0.28),
+    0 24px 52px rgba(0, 0, 0, 0.3);
+}
+
+.phaser-arena-host {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.phaser-arena-host canvas {
+  display: block;
+}
+
+.phaser-volume-control {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid rgba(238, 243, 249, 0.14);
+  border-radius: 8px;
+  background: rgba(8, 10, 14, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 28px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.phaser-volume-toggle {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(240, 192, 64, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--combat-gold);
+  cursor: pointer;
+}
+
+.phaser-volume-toggle.is-muted {
+  border-color: rgba(238, 243, 249, 0.16);
+  color: rgba(238, 243, 249, 0.72);
+}
+
+.phaser-volume-icon {
+  grid-area: 1 / 1;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.phaser-volume-icon-off,
+.phaser-volume-toggle.is-muted .phaser-volume-icon-on {
+  display: none;
+}
+
+.phaser-volume-toggle.is-muted .phaser-volume-icon-off {
+  display: block;
+}
+
+.phaser-volume-slider {
+  width: clamp(96px, 8vw, 128px);
+  accent-color: var(--combat-gold);
+  cursor: pointer;
+}
+
+.phaser-team-panel {
+  height: 100%;
+  min-width: 0;
+  padding: 10px 4px;
+  border: 1px solid var(--combat-border);
+  background:
+    linear-gradient(180deg, rgba(15, 22, 32, 0.98), rgba(9, 14, 22, 0.96)),
+    var(--combat-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 241, 184, 0.05);
+}
+
+.phaser-team-panel[data-side="right"] {
+  text-align: right;
+}
+
+.phaser-team-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.phaser-team-panel[data-side="right"] .phaser-team-header {
+  flex-direction: row-reverse;
+}
+
+.phaser-team-header span {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(240, 192, 64, 0.88);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.phaser-team-header strong {
+  flex: 0 0 auto;
+  color: rgba(238, 243, 249, 0.62);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.phaser-team-fighters {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.phaser-team-fighter {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(238, 243, 249, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.026);
+}
+
+.phaser-team-fighter-head,
+.phaser-fighter-health-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 7px;
+  min-width: 0;
+}
+
+.phaser-team-panel[data-side="right"] .phaser-team-fighter-head,
+.phaser-team-panel[data-side="right"] .phaser-fighter-health-line {
+  flex-direction: row-reverse;
+}
+
+.phaser-team-fighter-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffe39a;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phaser-team-fighter-head span {
+  flex: 0 0 auto;
+  color: rgba(238, 243, 249, 0.5);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.phaser-fighter-health-line {
+  margin-top: 7px;
+  color: rgba(238, 243, 249, 0.64);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.phaser-fighter-health-line span:last-child {
+  color: rgba(238, 243, 249, 0.46);
+}
+
+.phaser-health-track {
+  height: 8px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(238, 243, 249, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(238, 243, 249, 0.05),
+    inset 0 4px 8px rgba(0, 0, 0, 0.18);
+}
+
+.phaser-health-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #40c080, #d7c94c);
+  transition: width 0.28s ease;
+}
+
+.phaser-team-panel[data-side="right"] .phaser-health-fill {
+  margin-left: auto;
+}
+
+.phaser-health-fill[data-danger="true"] {
+  background: linear-gradient(90deg, #b82424, #f07a34);
+}
+
+.phaser-battle-button:focus-visible,
+.phaser-results-button:focus-visible,
+.phaser-seed-input:focus-visible,
+.phaser-volume-toggle:focus-visible,
+.phaser-volume-slider:focus-visible {
+  outline: 2px solid #fff3c4;
+  outline-offset: 3px;
+}
+
+@media (max-width: 1180px) {
+  .phaser-combat-layout {
+    grid-template-columns: minmax(142px, 172px) minmax(0, 1fr) minmax(142px, 172px);
+    gap: 8px;
+  }
+
+  .phaser-combat-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .phaser-combat-status {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .phaser-combat-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .phaser-team-column {
+    display: none;
+  }
+
+  .phaser-combat-main {
+    grid-row: 1;
+    grid-template-rows: auto minmax(0, 1fr);
+    padding: 0 8px 8px;
+  }
+
+  .phaser-combat-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-top: 6px;
+  }
+
+  .phaser-seed-control,
+  .phaser-seed-match,
+  .phaser-battle-button,
+  .phaser-results-button {
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .phaser-combat-main {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .phaser-combat-actions {
+    gap: 6px;
+  }
+
+  .phaser-seed-control,
+  .phaser-seed-match {
+    min-height: 38px;
+    padding: 0 8px;
+    font-size: 10px;
+  }
+
+  .phaser-battle-button,
+  .phaser-results-button {
+    min-height: 38px;
+    font-size: 12px;
+  }
+
+  .phaser-volume-control {
+    right: 8px;
+    top: 8px;
+    min-height: 40px;
+    padding: 0 8px;
+  }
+
+  .phaser-volume-toggle {
+    width: 30px;
+    height: 30px;
+  }
+
+  .phaser-volume-slider {
+    width: 82px;
+  }
+}

@@ -1,11 +1,11 @@
-import type { GladiatorClass, GladiatorStatKey } from "../../gladiators/gladiatorTypes";
+import type { GladiatorClass, GladiatorStatKey } from "@gladiators/combat-sim";
 import {
   getBonusPointsForLevel,
   getTotalPointsForLevel,
   gladiatorStatKeys,
   MAX_GLADIATOR_LEVEL,
   sumStatPoints,
-} from "../../gladiators/gladiatorProgression";
+} from "@gladiators/combat-sim";
 import {
   getAllocatedBonusPoints,
   getGladiatorClass,
@@ -17,7 +17,7 @@ import {
   type RosterSlot,
   type TrainingMode,
   type TeamId,
-} from "../../gladiators/roster";
+} from "@gladiators/combat-sim";
 import { svgMap } from "./renderer";
 
 export const statLabels: Record<string, string> = {

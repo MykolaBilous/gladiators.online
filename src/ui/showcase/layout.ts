@@ -1,8 +1,8 @@
 import {
   LEVEL_ZERO_STAT_POINTS,
   POINTS_PER_GLADIATOR_LEVEL,
-} from "../../gladiators/gladiatorProgression";
-import type { TeamId } from "../../gladiators/roster";
+} from "@gladiators/combat-sim";
+import type { TeamId } from "@gladiators/combat-sim";
 import { SAVE_BATTLE_SETUP_LABEL } from "./audio";
 
 export interface ShowcaseElements {
@@ -18,6 +18,9 @@ export interface ShowcaseElements {
   resultEl: HTMLElement;
   logEl: HTMLElement;
   stageEl: HTMLElement;
+  phaserStageEl: HTMLElement;
+  phaserStageHostEl: HTMLElement;
+  phaserLoadingEl: HTMLElement;
   arenaWorldEl: HTMLElement;
   typesButton: HTMLButtonElement;
   typesModal: HTMLElement;
@@ -36,15 +39,6 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
         <div class="showcase-header-copy">
           <h1 class="showcase-title">Gladiators Online</h1>
         </div>
-        <button
-          class="gladiator-types-btn"
-          type="button"
-          data-gladiator-types-open
-          aria-haspopup="dialog"
-          aria-expanded="false"
-        >
-          Типи гладіаторів
-        </button>
       </div>
     </header>
 
@@ -55,6 +49,15 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
           <p class="battle-status" data-battle-status>Арена готова до жеребу.</p>
         </div>
         <div class="battle-actions">
+          <button
+            class="gladiator-types-btn"
+            type="button"
+            data-gladiator-types-open
+            aria-haspopup="dialog"
+            aria-expanded="false"
+          >
+            Типи гладіаторів
+          </button>
           <div class="battle-volume-control" data-volume-control>
             <button
               class="battle-volume-toggle"
@@ -124,7 +127,45 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
             <button class="battle-results-button battle-results-button--stage" type="button" data-battle-results-button disabled>Переглянути результати</button>
             <button class="battle-preserve-button battle-preserve-button--stage" type="button" data-preserve-settings hidden>${SAVE_BATTLE_SETUP_LABEL}</button>
           </div>
-          <div class="arena-stage" data-arena-stage>
+          <div class="battle-stage-stack">
+            <div class="arena-stage arena-stage--phaser-view" data-phaser-stage>
+              <div class="arena-phaser-host" data-phaser-battle-window></div>
+              <div class="arena-loading" data-phaser-loading hidden aria-live="polite">
+                <span class="arena-loading-spinner" aria-hidden="true"></span>
+                <span>Завантаження бою...</span>
+              </div>
+              <div class="battle-volume-control battle-volume-control--stage" data-volume-control>
+                <button
+                  class="battle-volume-toggle"
+                  type="button"
+                  data-volume-toggle
+                  aria-label="Р’РёРјРєРЅСѓС‚Рё Р·РІСѓРє"
+                  aria-pressed="false"
+                >
+                  <svg class="battle-volume-icon battle-volume-icon-on" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
+                    <path d="M16 8.5a5 5 0 0 1 0 7"></path>
+                    <path d="M18.5 6a8.5 8.5 0 0 1 0 12"></path>
+                  </svg>
+                  <svg class="battle-volume-icon battle-volume-icon-off" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 9v6h4l5 4V5L8 9H4Z"></path>
+                    <path d="m16 9 5 5"></path>
+                    <path d="m21 9-5 5"></path>
+                  </svg>
+                </button>
+                <input
+                  class="battle-volume-slider"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="100"
+                  data-volume-slider
+                  aria-label="Р—Р°РіР°Р»СЊРЅР° РіСѓС‡РЅС–СЃС‚СЊ"
+                />
+              </div>
+            </div>
+            <div class="arena-stage arena-stage--legacy-view" data-arena-stage>
             <div class="battle-volume-control battle-volume-control--stage" data-volume-control>
               <button
                 class="battle-volume-toggle"
@@ -158,6 +199,7 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
             <div class="arena-world" data-arena-world>
               <div class="arena-crowd"></div>
               <div class="arena-fighters" data-arena-fighters></div>
+            </div>
             </div>
           </div>
         </div>
@@ -216,6 +258,9 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
   const resultCandidate = overlay.querySelector<HTMLElement>("[data-battle-result]");
   const logCandidate = overlay.querySelector<HTMLElement>("[data-battle-log]");
   const stageCandidate = overlay.querySelector<HTMLElement>("[data-arena-stage]");
+  const phaserStageCandidate = overlay.querySelector<HTMLElement>("[data-phaser-stage]");
+  const phaserStageHostCandidate = overlay.querySelector<HTMLElement>("[data-phaser-battle-window]");
+  const phaserLoadingCandidate = overlay.querySelector<HTMLElement>("[data-phaser-loading]");
   const arenaWorldCandidate = overlay.querySelector<HTMLElement>("[data-arena-world]");
   const typesButtonCandidate = overlay.querySelector<HTMLButtonElement>("[data-gladiator-types-open]");
   const typesModalCandidate = overlay.querySelector<HTMLElement>("[data-gladiator-types-modal]");
@@ -232,6 +277,9 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
     !resultCandidate ||
     !logCandidate ||
     !stageCandidate ||
+    !phaserStageCandidate ||
+    !phaserStageHostCandidate ||
+    !phaserLoadingCandidate ||
     !arenaWorldCandidate ||
     !typesButtonCandidate ||
     !typesModalCandidate
@@ -262,6 +310,9 @@ export function createShowcaseOverlay(initialTypeCards: string): ShowcaseElement
     resultEl: resultCandidate,
     logEl: logCandidate,
     stageEl: stageCandidate,
+    phaserStageEl: phaserStageCandidate,
+    phaserStageHostEl: phaserStageHostCandidate,
+    phaserLoadingEl: phaserLoadingCandidate,
     arenaWorldEl: arenaWorldCandidate,
     typesButton: typesButtonCandidate,
     typesModal: typesModalCandidate,

@@ -1,4 +1,4 @@
-import type { BattleEvent, BattlePlan } from "../../combat/battleTypes";
+import type { BattleEvent, BattlePlan } from "@gladiators/combat-sim";
 import type { BattleEventPlaybackContext, BattleEventPlaybackController } from "./battleEventContext";
 import { createBattleMovementPlayback } from "./battleMovementPlayback";
 import { createBattleStrikePlayback } from "./battleStrikePlayback";

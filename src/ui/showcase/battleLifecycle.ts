@@ -1,8 +1,8 @@
-import { loadBattleReplay, recordBattleReplay } from "../../combat/battleSeedRecorder";
-import type { BattleReplayRecord, BattleReplaySetup } from "../../combat/battleReplayTypes";
-import { createBattlePlan } from "../../combat/battleSimulator";
-import type { BattleEvent, BattlePlan, BattlePoint } from "../../combat/battleTypes";
-import { buildTeamMap, type Roster, type RuntimeGladiator } from "../../gladiators/roster";
+import { loadBattleReplay, recordBattleReplay } from "../../api/battleReplayClient";
+import type { BattleReplayRecord, BattleReplaySetup } from "@gladiators/combat-sim";
+import { createBattlePlan } from "@gladiators/combat-sim";
+import type { BattleEvent, BattlePlan, BattlePoint } from "@gladiators/combat-sim";
+import { buildTeamMap, type Roster, type RuntimeGladiator } from "@gladiators/combat-sim";
 import type { BattleResultStats } from "../gladiatorShowcaseTypes";
 import type { BattleAudioController } from "./audio";
 import type { BattleEventPlaybackController } from "./battleEventPlayback";
@@ -29,6 +29,8 @@ export interface BattleLifecycleController {
   showBattleResultsNow: () => void;
 }
 
+export type BattleWindowPlaybackStarter = () => void;
+
 export interface BattleLifecycleContext {
   appendLog: (event: BattleEvent) => void;
   battleAudio: BattleAudioController;
@@ -47,6 +49,9 @@ export interface BattleLifecycleContext {
   markFighterDefeated: (fighterId: string) => void;
   overlay: HTMLElement;
   prepareNextBattleWithCurrentSettings: () => void;
+  playBattleWindow?: (
+    plan: BattlePlan,
+  ) => Promise<BattleWindowPlaybackStarter | void> | BattleWindowPlaybackStarter | void;
   resetArenaNets: () => void;
   resetBattleUi: (plan: BattlePlan) => void;
   resetBattleUiClasses: () => void;
@@ -84,6 +89,7 @@ export function createBattleLifecycleController({
   markFighterDefeated,
   overlay,
   prepareNextBattleWithCurrentSettings,
+  playBattleWindow,
   resetArenaNets,
   resetBattleUi,
   resetBattleUiClasses,
@@ -230,12 +236,15 @@ export function createBattleLifecycleController({
     syncBattleButtonState();
     battleSeedMatchValueEl.textContent = "-";
     resetBattleUi(plan);
-    battleAudio.startBattle();
+    const startBattleWindow = await playBattleWindow?.(plan);
+
+    if (state.disposed || runId !== state.currentRun) return;
 
     try {
-      await wait(420);
-      if (state.disposed || runId !== state.currentRun) return;
-
+      battleAudio.startBattle();
+      if (typeof startBattleWindow === "function") {
+        startBattleWindow();
+      }
       const startedAt = performance.now();
       const playbackTasks = plan.events.map(async (event) => {
         const waitForEvent = event.timeMs - (performance.now() - startedAt);

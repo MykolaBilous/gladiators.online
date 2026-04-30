@@ -1,5 +1,5 @@
-import { metersToArenaDistance } from "../../config/arenaScale";
-import type { BattlePoint } from "../../combat/battleTypes";
+import type { BattlePoint } from "@gladiators/combat-sim";
+import { metersToArenaDistance } from "@gladiators/combat-sim";
 
 export const ACTION_MOTION_SCALE = 1.3;
 export const DEFENSE_MOTION_SCALE = 1.24;

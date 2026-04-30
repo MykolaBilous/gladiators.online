@@ -1,5 +1,5 @@
-import type { BattleEvent } from "../../combat/battleTypes";
-import type { RuntimeGladiator } from "../../gladiators/roster";
+import type { BattleEvent } from "@gladiators/combat-sim";
+import type { RuntimeGladiator } from "@gladiators/combat-sim";
 import {
   JAVELIN_DROP_MS,
   JAVELIN_EXIT_MS,

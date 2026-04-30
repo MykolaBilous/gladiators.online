@@ -1,4 +1,4 @@
-import type { BattleEvent, BattlePoint } from "../../combat/battleTypes";
+import type { BattleEvent, BattlePoint } from "@gladiators/combat-sim";
 import type { DefenseOutcome } from "../gladiatorShowcaseTypes";
 import type { BattleEventPlaybackContext, PlayDefenseReaction } from "./battleEventContext";
 import { UI_MIN_MOVEMENT_DISTANCE, getPointDistance } from "./playback";

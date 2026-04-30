@@ -1,6 +1,6 @@
-import type { BattleEvent, BattlePlan, BattleTeamId } from "../../combat/battleTypes";
-import { TEAM_LABELS } from "../../gladiators/roster";
-import { gladiatorClasses } from "../../gladiators/gladiatorClasses";
+import type { BattleEvent, BattlePlan, BattleTeamId } from "@gladiators/combat-sim";
+import { TEAM_LABELS } from "@gladiators/combat-sim";
+import { gladiatorClasses } from "@gladiators/combat-sim";
 import type { BattleResultStats } from "../gladiatorShowcaseTypes";
 import { formatDuration } from "./playback";
 import { SAVE_BATTLE_SETUP_LABEL } from "./audio";

@@ -1,4 +1,4 @@
-import type { BattlePoint } from "../../combat/battleTypes";
+import type { BattlePoint } from "@gladiators/combat-sim";
 import {
   getGladiatorClass,
   TEAM_IDS,
@@ -7,7 +7,7 @@ import {
   type RosterSlot,
   type RuntimeGladiator,
   type TeamId,
-} from "../../gladiators/roster";
+} from "@gladiators/combat-sim";
 import { svgMap } from "./renderer";
 
 export const SPAWN_GRID_COLUMNS = 3;

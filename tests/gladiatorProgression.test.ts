@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { murmillo, retiarius } from "../src/gladiators/gladiatorClasses";
+import { murmillo, retiarius } from "@gladiators/combat-sim";
 import {
   createEmptyStatPoints,
   deriveGladiatorStats,
-} from "../src/gladiators/gladiatorProgression";
+} from "@gladiators/combat-sim";
 
 describe("deriveGladiatorStats", () => {
   it("preserves class base stats when no points are assigned", () => {

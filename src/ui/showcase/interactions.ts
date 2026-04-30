@@ -1,4 +1,4 @@
-import { clampGladiatorLevel } from "../../gladiators/gladiatorProgression";
+import { clampGladiatorLevel } from "@gladiators/combat-sim";
 import {
   getAllSlots,
   setSlotClass,
@@ -7,7 +7,7 @@ import {
   type RosterSlot,
   type TeamId,
   type TrainingMode,
-} from "../../gladiators/roster";
+} from "@gladiators/combat-sim";
 import type { SpawnGridCell } from "./placement";
 import {
   clampManualBonusPoints,

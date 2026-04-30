@@ -2,18 +2,19 @@ import { Skeleton2D } from "../animation/Skeleton2D";
 import type {
   BattleReplayRecord,
   BattleReplaySetup,
-} from "../combat/battleReplayTypes";
+} from "@gladiators/combat-sim";
 import type {
   BattlePlan,
   BattlePoint,
-} from "../combat/battleTypes";
-import { gladiatorClasses } from "../gladiators/gladiatorClasses";
+} from "@gladiators/combat-sim";
+import { createBattlePlan, gladiatorClasses } from "@gladiators/combat-sim";
 import {
   getBonusPointsForLevel,
   sumStatPoints,
-} from "../gladiators/gladiatorProgression";
+} from "@gladiators/combat-sim";
 import {
   buildRuntimeGladiators,
+  buildTeamMap,
   createAutoRoster,
   createManualDefaultRoster,
   getAllSlots,
@@ -23,7 +24,9 @@ import {
   type RuntimeGladiator,
   type TeamId,
   type TrainingMode,
-} from "../gladiators/roster";
+} from "@gladiators/combat-sim";
+import { createPhaserArenaRenderer } from "../game-phaser/createPhaserArenaRenderer";
+import type { PhaserArenaControls } from "../game-phaser/types";
 import { createBattleAudioController } from "./showcase/audio";
 import { createArenaCameraController } from "./showcase/arenaCamera";
 import { createBattleArenaUi } from "./showcase/battleArenaUi";
@@ -77,6 +80,11 @@ import {
 } from "./showcase/placement";
 import "./gladiatorShowcase.css";
 
+interface PhaserBattleWindowHandle {
+  dispose: () => void;
+  layer: HTMLElement;
+}
+
 export function createGladiatorShowcase(container: HTMLElement): () => void {
   let autoRoster: Roster = createAutoRoster();
   let manualRoster: Roster = createManualDefaultRoster();
@@ -109,6 +117,12 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
   const getFightersByTeam = (teamId: TeamId): RuntimeGladiator[] =>
     runtimeFighters.filter((fighter) => fighter.teamId === teamId);
 
+  const getPhaserFighterLabels = (): Record<string, string> =>
+    runtimeFighters.reduce<Record<string, string>>((labels, fighter) => {
+      labels[fighter.id] = fighter.displayName;
+      return labels;
+    }, {});
+
   const initialTypeCards = gladiatorClasses.map((gladiator) => createTypeCard(gladiator)).join("");
   const {
     overlay,
@@ -123,6 +137,9 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     resultEl,
     logEl,
     stageEl,
+    phaserStageEl,
+    phaserStageHostEl,
+    phaserLoadingEl,
     arenaWorldEl,
     typesButton,
     typesModal,
@@ -163,6 +180,9 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
   let activeBattlePlan: BattlePlan | null = null;
   let currentRun = 0;
   const fighterArenaPositions = new Map<string, BattlePoint>();
+  let activePhaserBattleWindow: PhaserBattleWindowHandle | null = null;
+  let pendingPhaserBattleWindow: PhaserBattleWindowHandle | null = null;
+  let phaserBattleWindowRenderId = 0;
 
   function setBattleResultsButtonEnabled(enabled: boolean): void {
     for (const btn of battleResultsButtons) {
@@ -448,6 +468,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     rebuildArenaSkeletons();
     renderTrainingBody();
     setInitialFighterPositions();
+    renderPhaserPreviewBattleWindow();
   }
 
   function wait(ms: number): Promise<void> {
@@ -553,6 +574,156 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     stopWalkLoop,
   });
 
+  function createPhaserBattleWindowHandle(
+    layer: HTMLElement,
+    disposeRenderer: () => void,
+  ): PhaserBattleWindowHandle {
+    let isDisposed = false;
+
+    return {
+      layer,
+      dispose: () => {
+        if (isDisposed) {
+          return;
+        }
+
+        isDisposed = true;
+        disposeRenderer();
+        layer.remove();
+      },
+    };
+  }
+
+  function disposePhaserBattleWindowHandle(handle: PhaserBattleWindowHandle | null): void {
+    handle?.dispose();
+  }
+
+  function disposeAllPhaserBattleWindows(): void {
+    phaserBattleWindowRenderId += 1;
+    disposePhaserBattleWindowHandle(pendingPhaserBattleWindow);
+    disposePhaserBattleWindowHandle(activePhaserBattleWindow);
+    pendingPhaserBattleWindow = null;
+    activePhaserBattleWindow = null;
+    phaserStageHostEl.replaceChildren();
+    setPhaserBattleLoading(false);
+  }
+
+  function setPhaserBattleLoading(isLoading: boolean): void {
+    phaserStageEl.classList.toggle("is-loading", isLoading);
+    phaserStageEl.setAttribute("aria-busy", isLoading ? "true" : "false");
+    phaserLoadingEl.hidden = !isLoading;
+  }
+
+  function renderPhaserBattleWindow(
+    plan: BattlePlan,
+    options: { showLoading?: boolean } = {},
+  ): Promise<() => void> {
+    const renderId = ++phaserBattleWindowRenderId;
+    const previousActiveWindow = activePhaserBattleWindow;
+    let handle: PhaserBattleWindowHandle | null = null;
+    let controls: PhaserArenaControls | null = null;
+    let settled = false;
+    let resolveReady: (startPlayback: () => void) => void = () => {};
+    const readyPromise = new Promise<() => void>((resolve) => {
+      resolveReady = resolve;
+    });
+
+    if (options.showLoading) {
+      setPhaserBattleLoading(true);
+    }
+
+    disposePhaserBattleWindowHandle(pendingPhaserBattleWindow);
+    pendingPhaserBattleWindow = null;
+
+    const layer = document.createElement("div");
+    layer.className = "arena-phaser-layer";
+    phaserStageHostEl.appendChild(layer);
+
+    const revealWhenReady = (): void => {
+      if (!handle || !controls) {
+        return;
+      }
+
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+
+      if (disposed || renderId !== phaserBattleWindowRenderId) {
+        handle.dispose();
+        resolveReady(() => undefined);
+        return;
+      }
+
+      layer.classList.add("is-active");
+      disposePhaserBattleWindowHandle(previousActiveWindow);
+      activePhaserBattleWindow = handle;
+
+      if (pendingPhaserBattleWindow === handle) {
+        pendingPhaserBattleWindow = null;
+      }
+
+      setPhaserBattleLoading(false);
+      resolveReady(() => controls?.startPlayback());
+    };
+
+    try {
+      const disposeRenderer = createPhaserArenaRenderer(layer, {
+        battlePlan: plan,
+        fighterLabels: getPhaserFighterLabels(),
+        autoPlay: false,
+        onControlsReady: (readyControls) => {
+          controls = readyControls;
+          revealWhenReady();
+        },
+        onHealthChange: ({ fighterId, hp, maxHp }) => {
+          setHealth(fighterId, hp, maxHp);
+        },
+        onStatus: (status) => {
+          if (status.phase === "playing") {
+            statusEl.textContent = status.message;
+          }
+        },
+      });
+
+      handle = createPhaserBattleWindowHandle(layer, disposeRenderer);
+      pendingPhaserBattleWindow = handle;
+      revealWhenReady();
+    } catch (error) {
+      layer.remove();
+      if (options.showLoading) {
+        setPhaserBattleLoading(false);
+      }
+      throw error;
+    }
+
+    return readyPromise;
+  }
+
+  function renderPhaserPreviewBattleWindow(): void {
+    if (runtimeFighters.length < 2) {
+      return;
+    }
+
+    try {
+      const previewPlan = createBattlePlan(
+        runtimeFighters,
+        buildTeamMap(getActiveRoster()),
+        currentSpawnPositions,
+        { seed: "phaser-preview" },
+      );
+      renderPhaserBattleWindow(previewPlan);
+      battleSeedMatchValueEl.textContent = "-";
+    } catch {
+      disposeAllPhaserBattleWindows();
+    }
+  }
+
+  function playPhaserBattleWindow(plan: BattlePlan): Promise<() => void> {
+    return renderPhaserBattleWindow(plan, { showLoading: true });
+  }
+
   const throwables = createBattleThrowables({
     stageEl,
     arenaWorldEl,
@@ -565,6 +736,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
 
   function clearBattleFinale(): void {
     clearBattleFinaleElements(stageEl);
+    clearBattleFinaleElements(phaserStageEl);
   }
 
   function resetToInitialState(): void {
@@ -771,6 +943,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     markFighterDefeated,
     overlay,
     prepareNextBattleWithCurrentSettings,
+    playBattleWindow: playPhaserBattleWindow,
     resetArenaNets,
     resetBattleUi,
     resetBattleUiClasses: resetFighterClasses,
@@ -781,7 +954,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     setHandJavelinCount,
     setHandNetVisible,
     setHealth,
-    stageEl,
+    stageEl: phaserStageEl,
     state: battleLifecycleState,
     statusEl,
     syncBattleButtonState,
@@ -917,6 +1090,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     arenaCamera.dispose();
     clearPendingTimers(false);
     battleAudio.stopAll();
+    disposeAllPhaserBattleWindows();
     for (const skeleton of skeletons.values()) skeleton.dispose();
     skeletons.clear();
     overlay.remove();

@@ -1,5 +1,5 @@
 import type { Skeleton2D } from "../../animation/Skeleton2D";
-import type { BattleEvent, BattlePlan, BattlePoint } from "../../combat/battleTypes";
+import type { BattleEvent, BattlePlan, BattlePoint } from "@gladiators/combat-sim";
 import type { DefenseOutcome, FloatingVariant } from "../gladiatorShowcaseTypes";
 import type { BattleAudioController } from "./audio";
 import type { BattleThrowablesController } from "./throwables";

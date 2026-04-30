@@ -1,6 +1,6 @@
 import type { AnimationClip, BoneDef } from "../../animation/skeletonTypes";
-import type { RuntimeGladiator, TeamId } from "../../gladiators/roster";
-import { TEAM_LABELS } from "../../gladiators/roster";
+import type { RuntimeGladiator, TeamId } from "@gladiators/combat-sim";
+import { TEAM_LABELS } from "@gladiators/combat-sim";
 import {
   createMurmilloSvg,
   murmilloBones,
@@ -9,7 +9,7 @@ import {
   murmilloShieldBash,
   murmilloSwordSlash,
   murmilloWalk,
-} from "../../gladiators/murmilloSvg";
+} from "../../gladiatorAssets/murmilloSvg";
 import {
   createRetiariusSvg,
   retiariusBones,
@@ -18,7 +18,7 @@ import {
   retiariusTridentThrust,
   retiariusTridentParry,
   retiariusWalk,
-} from "../../gladiators/retiariusSvg";
+} from "../../gladiatorAssets/retiariusSvg";
 import {
   createVelesSvg,
   velesBones,
@@ -27,7 +27,7 @@ import {
   velesShortSwordBlock,
   velesShortSwordSlash,
   velesWalk,
-} from "../../gladiators/velesSvg";
+} from "../../gladiatorAssets/velesSvg";
 import type { DefenseOutcome } from "../gladiatorShowcaseTypes";
 import {
   ACTION_MOTION_SCALE,

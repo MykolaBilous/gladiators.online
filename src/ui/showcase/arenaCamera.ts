@@ -1,5 +1,5 @@
-import type { BattlePoint } from "../../combat/battleTypes";
-import type { RuntimeGladiator } from "../../gladiators/roster";
+import type { BattlePoint } from "@gladiators/combat-sim";
+import type { RuntimeGladiator } from "@gladiators/combat-sim";
 import {
   CAMERA_CLOSE_FREEZE_SPAN,
   CAMERA_FIT_TOLERANCE,

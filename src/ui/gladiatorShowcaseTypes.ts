@@ -1,6 +1,6 @@
 import type { Skeleton2D } from "../animation/Skeleton2D";
-import type { BattleFighterRuntime } from "../combat/battleTypes";
-import type { GladiatorClass } from "../gladiators/gladiatorTypes";
+import type { BattleFighterRuntime } from "@gladiators/combat-sim";
+import type { GladiatorClass } from "@gladiators/combat-sim";
 
 export type DefenseOutcome = "block" | "miss";
 export type FloatingVariant = "hit" | "block" | "miss" | "net" | "interrupt";

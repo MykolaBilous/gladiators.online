@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createBattlePlan } from "../src/combat/battleSimulator";
-import { murmillo, retiarius, veles } from "../src/gladiators/gladiatorClasses";
+import { createBattlePlan } from "@gladiators/combat-sim";
+import { murmillo, retiarius, veles } from "@gladiators/combat-sim";
 
 describe("createBattlePlan", () => {
   it("returns reproducible plans for the same seed", () => {

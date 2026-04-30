@@ -1,0 +1,72 @@
+[2m1:08:18 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mTypeError: Cannot read properties of null (reading 'renderer')
+    at new TextureSource (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:164062:26)
+    at new Texture (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:162430:62)
+    at TextureManager.create (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163724:16)
+    at TextureManager.addSpriteSheet (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163598:51)
+    at registerPhaserFighterAnimationAssets (http://localhost:5173/src/game-phaser/svgSpriteSheet.ts:109:19)
+    at async AnimationShowcaseScene.prepareShowcase (http://localhost:5173/src/game-phaser/createPhaserAnimationShowcase.ts:82:4)
+[2m1:08:18 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled rejection] [1mTypeError[22m: Cannot read properties of null (reading 'drawImage')
+[39m > Frame.updateUVs node_modules/phaser/dist/phaser.esm.js:229388:27
+ > Frame.setCutPosition node_modules/phaser/dist/phaser.esm.js:229007:20
+ > Frame.setSize node_modules/phaser/dist/phaser.esm.js:229050:13
+ > Text.updateText node_modules/phaser/dist/phaser.esm.js:92119:23
+ > Text.setText node_modules/phaser/dist/phaser.esm.js:91436:17
+ > AnimationShowcaseScene.prepareShowcase src/game-phaser/createPhaserAnimationShowcase.ts:150:18
+    148 |      } catch (error) {
+    149 |        console.error(error);
+    150 |        loadingText.setText("Could not load animation catalog");
+        |                    ^
+    151 |        loadingText.setColor("#ff8c7d");
+    152 |      }
+
+[2m1:08:23 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mTypeError: Cannot read properties of null (reading 'renderer')
+    at new TextureSource (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:164062:26)
+    at new Texture (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:162430:62)
+    at TextureManager.create (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163724:16)
+    at TextureManager.addSpriteSheet (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163598:51)
+    at registerPhaserFighterAnimationAssets (http://localhost:5173/src/game-phaser/svgSpriteSheet.ts:109:19)
+    at async AnimationShowcaseScene.prepareShowcase (http://localhost:5173/src/game-phaser/createPhaserAnimationShowcase.ts:82:4)
+[2m1:08:23 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled rejection] [1mTypeError[22m: Cannot read properties of null (reading 'drawImage')
+[39m > Frame.updateUVs node_modules/phaser/dist/phaser.esm.js:229388:27
+ > Frame.setCutPosition node_modules/phaser/dist/phaser.esm.js:229007:20
+ > Frame.setSize node_modules/phaser/dist/phaser.esm.js:229050:13
+ > Text.updateText node_modules/phaser/dist/phaser.esm.js:92119:23
+ > Text.setText node_modules/phaser/dist/phaser.esm.js:91436:17
+ > AnimationShowcaseScene.prepareShowcase src/game-phaser/createPhaserAnimationShowcase.ts:150:18
+    148 |      } catch (error) {
+    149 |        console.error(error);
+    150 |        loadingText.setText("Could not load animation catalog");
+        |                    ^
+    151 |        loadingText.setColor("#ff8c7d");
+    152 |      }
+
+[2m1:28:00 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mTypeError: Cannot read properties of null (reading 'renderer')
+    at new TextureSource (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:164062:26)
+    at new Texture (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:162430:62)
+    at TextureManager.create (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163724:16)
+    at TextureManager.addSpriteSheet (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163598:51)
+    at registerPhaserFighterAnimationAssets (http://localhost:5173/src/game-phaser/svgSpriteSheet.ts?t=1777501649809:121:19)
+    at async PreloadScene.prepareFighterAnimations (http://localhost:5173/src/game-phaser/scenes/PreloadScene.ts?t=1777501649809:38:4)
+[2m1:28:02 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mBattle replay was not recorded. TypeError: Failed to fetch
+    at recordBattleReplay (http://localhost:5173/src/api/battleReplayClient.ts:30:7)
+    at handleBattleClick (http://localhost:5173/src/ui/showcase/battleLifecycle.ts:159:3)
+    at HTMLButtonElement.onBattleClick (http://localhost:5173/src/ui/showcase/interactions.ts:6:8)
+[2m1:28:19 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mBattle replay was not recorded. TypeError: Failed to fetch
+    at recordBattleReplay (http://localhost:5173/src/api/battleReplayClient.ts:30:7)
+    at handleBattleClick (http://localhost:5173/src/ui/showcase/battleLifecycle.ts:159:3)
+    at HTMLButtonElement.onBattleClick (http://localhost:5173/src/ui/showcase/interactions.ts:6:8)
+[2m1:29:02 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mBattle replay was not recorded. TypeError: Failed to fetch
+    at recordBattleReplay (http://localhost:5173/src/api/battleReplayClient.ts:30:7)
+    at handleBattleClick (http://localhost:5173/src/ui/showcase/battleLifecycle.ts:159:3)
+    at HTMLButtonElement.onBattleClick (http://localhost:5173/src/ui/showcase/interactions.ts:6:8)
+[2m1:29:38 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mTypeError: Cannot read properties of null (reading 'renderer')
+    at new TextureSource (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:164062:26)
+    at new Texture (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:162430:62)
+    at TextureManager.create (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163724:16)
+    at TextureManager.addSpriteSheet (http://localhost:5173/node_modules/.vite/deps/phaser.js?v=869b933c:163598:51)
+    at registerPhaserFighterAnimationAssets (http://localhost:5173/src/game-phaser/svgSpriteSheet.ts?t=1777501649809:121:19)
+    at async PreloadScene.prepareFighterAnimations (http://localhost:5173/src/game-phaser/scenes/PreloadScene.ts?t=1777501649809:38:4)
+[2m1:29:40 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mBattle replay was not recorded. TypeError: Failed to fetch
+    at recordBattleReplay (http://localhost:5173/src/api/battleReplayClient.ts:30:7)
+    at handleBattleClick (http://localhost:5173/src/ui/showcase/battleLifecycle.ts:159:3)
+    at HTMLButtonElement.onBattleClick (http://localhost:5173/src/ui/showcase/interactions.ts:6:8)

@@ -1,6 +1,6 @@
 import type { Skeleton2D } from "../../animation/Skeleton2D";
-import type { BattleEvent } from "../../combat/battleTypes";
-import { TEAM_IDS, type RuntimeGladiator, type TeamId } from "../../gladiators/roster";
+import type { BattleEvent } from "@gladiators/combat-sim";
+import { TEAM_IDS, type RuntimeGladiator, type TeamId } from "@gladiators/combat-sim";
 import type { FloatingVariant } from "../gladiatorShowcaseTypes";
 import type { BattleAudioController } from "./audio";
 import { VELES_STARTING_JAVELINS } from "./playback";

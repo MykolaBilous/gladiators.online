@@ -1,4 +1,4 @@
-import type { BattleEvent, BattlePlan } from "../../combat/battleTypes";
+import type { BattleEvent, BattlePlan } from "@gladiators/combat-sim";
 import type { BattleEventPlaybackContext, PlayDefenseReaction } from "./battleEventContext";
 import {
   ACTION_MOTION_SCALE,
