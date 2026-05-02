@@ -925,7 +925,7 @@
 
 .arena-stage--phaser-view,
 .arena-stage--legacy-view {
-  min-height: clamp(440px, 48vh, 610px);
+  min-height: clamp(620px, 74vh, 920px);
 }
 
 .arena-stage--legacy-view > .battle-volume-control--stage {
@@ -1723,7 +1723,6 @@
   pointer-events: auto;
   transform: translate(-50%, -50%);
   animation: battle-finale-pop 0.48s cubic-bezier(0.16, 0.86, 0.24, 1) both;
-  backdrop-filter: blur(10px);
 }
 
 .battle-finale-kicker {

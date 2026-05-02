@@ -115,6 +115,8 @@ export class ArenaScene extends Phaser.Scene {
     });
     this.arenaData.onControlsReady?.({
       startPlayback: () => this.startBattlePlayback(),
+      stopPlayback: () => this.time.removeAllEvents(),
+      skipToEnd: () => this.skipToEnd(),
     });
 
     if (this.arenaData.autoPlay ?? true) {
@@ -195,7 +197,6 @@ export class ArenaScene extends Phaser.Scene {
       const definition = getPhaserFighterDefinition(classId);
       const idleKey = getPhaserFighterAnimationKey(classId, "idle");
       const container = this.add.container(0, 0);
-      const shadow = this.add.ellipse(0, 8, 130, 30, 0x24120a, 0.28);
       const sprite = this.add
         .sprite(0, 0, idleKey, 0)
         .setOrigin(definition.originX, definition.originY)
@@ -203,7 +204,7 @@ export class ArenaScene extends Phaser.Scene {
       const nameplate = this.createNameplate(fighter.label, maxHp, fighter.teamId);
 
       sprite.setFlipX(fighter.teamId === "right");
-      container.add([shadow, sprite, nameplate.container]);
+      container.add([sprite, nameplate.container]);
 
       const view: FighterView = {
         id: fighter.id,
@@ -315,7 +316,7 @@ export class ArenaScene extends Phaser.Scene {
         });
       }
 
-      if (loser) {
+      if (loser && !this.defeatedFighterIds.has(plan.loserId)) {
         this.defeatedFighterIds.add(plan.loserId);
         this.playFighterAnimation(loser, "defeat", { hold: true });
         this.tweens.add({
@@ -368,6 +369,7 @@ export class ArenaScene extends Phaser.Scene {
 
       this.time.delayedCall(attackStartMs, () => {
         this.playFighterAnimation(attacker, attackState);
+        this.arenaData?.onAttackAnimationStart?.(event);
       });
     }
 
@@ -456,6 +458,21 @@ export class ArenaScene extends Phaser.Scene {
 
       if (event.defenderHp <= 0) {
         this.defeatedFighterIds.add(event.defenderId);
+        const defeatedId = event.defenderId;
+        this.time.delayedCall(HIT_RECOIL_MS + 60, () => {
+          const view = this.fighterViews.get(defeatedId);
+          if (view && this.defeatedFighterIds.has(defeatedId)) {
+            this.playFighterAnimation(view, "defeat", { hold: true });
+            this.tweens.add({
+              targets: view.container,
+              alpha: 0.62,
+              angle: view.teamId === "left" ? -7 : 7,
+              y: view.container.y + 26,
+              duration: 520,
+              ease: SOFT_EASE,
+            });
+          }
+        });
       }
     } else {
       this.showFloatingText(
@@ -1004,6 +1021,49 @@ export class ArenaScene extends Phaser.Scene {
       hp: currentHp,
       maxHp: view.maxHp,
     });
+  }
+
+  skipToEnd(): void {
+    if (!this.battlePlan || !this.arenaData) {
+      return;
+    }
+
+    const plan = this.battlePlan;
+
+    this.time.removeAllEvents();
+
+    for (const view of this.fighterViews.values()) {
+      view.movementTween?.remove();
+      view.movementTween = null;
+      view.resetAnimationEvent?.remove(false);
+      view.resetAnimationEvent = null;
+    }
+
+    const winner = this.fighterViews.get(plan.winnerId);
+    const loser = this.fighterViews.get(plan.loserId);
+
+    if (winner) {
+      this.playFighterAnimation(winner, "victory", { hold: true });
+      this.tweens.add({
+        targets: winner.container,
+        y: winner.container.y - 12,
+        scale: winner.container.scale * 1.04,
+        duration: 460,
+        ease: SOFT_EASE,
+      });
+    }
+
+    if (loser && !this.defeatedFighterIds.has(plan.loserId)) {
+      this.defeatedFighterIds.add(plan.loserId);
+      this.playFighterAnimation(loser, "defeat", { hold: true });
+      loser.container.setAlpha(0.62);
+      loser.container.setAngle(loser.teamId === "left" ? -7 : 7);
+      loser.container.setY(loser.container.y + 26);
+    }
+
+    const message = formatArenaResult(plan, this.arenaData.fighterLabels);
+    this.arenaData.onStatus?.({ phase: "complete", message, winnerId: plan.winnerId });
+    this.arenaData.onBattleComplete?.(plan);
   }
 }
 

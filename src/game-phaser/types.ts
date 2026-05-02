@@ -16,6 +16,8 @@ export interface PhaserArenaHealthChange {
 
 export interface PhaserArenaControls {
   startPlayback: () => void;
+  stopPlayback: () => void;
+  skipToEnd: () => void;
 }
 
 export interface ArenaSceneData {
@@ -25,6 +27,7 @@ export interface ArenaSceneData {
   onControlsReady?: (controls: PhaserArenaControls) => void;
   onHealthChange?: (change: PhaserArenaHealthChange) => void;
   onStatus?: (status: PhaserArenaStatus) => void;
+  onAttackAnimationStart?: (event: BattleEvent) => void;
   onBattleEvent?: (event: BattleEvent, plan: BattlePlan) => void;
   onBattleComplete?: (plan: BattlePlan) => void;
 }

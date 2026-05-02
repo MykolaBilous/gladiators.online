@@ -12,8 +12,6 @@
     "typecheck": "tsc -b --pretty"
   },
   "dependencies": {
-    "@babylonjs/core": "^9.4.1",
-    "@babylonjs/loaders": "^9.4.1",
     "@gladiators/combat-sim": "file:../gladiators.online-core/packages/combat-sim",
     "@gladiators/shared": "file:../gladiators.online-core/packages/shared",
     "phaser": "^4.0.0",
@@ -21,7 +19,6 @@
     "react-dom": "^19.2.5"
   },
   "devDependencies": {
-    "@babylonjs/inspector": "^9.4.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "typescript": "^6.0.3",

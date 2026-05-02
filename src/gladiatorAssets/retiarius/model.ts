@@ -132,24 +132,24 @@ export function createRetiariusSvg(): string {
         <path d="M73 213 Q77 212 81 214" stroke="#5d3617" stroke-width="0.9" fill="none" opacity="0.55"/>
 
         <g data-bone="net">
-          <path d="M65 209 Q49 204 32 188" stroke="#8f8157" stroke-width="2.2" fill="none"/>
-          <path d="M26 154 L72 194 L27 246 L-20 200 Z" fill="rgba(160,140,92,0.18)" stroke="url(#r-rope)" stroke-width="2"/>
-          <path d="M26 168 L58 196 L27 230 L-4 200 Z" stroke="url(#r-rope)" stroke-width="1.5" fill="none"/>
-          <path d="M26 182 L43 197 L27 215 L9 200 Z" stroke="url(#r-rope)" stroke-width="1.2" fill="none"/>
-          <line x1="-15" y1="200" x2="68" y2="199" stroke="#b3a06a" stroke-width="1" opacity="0.7"/>
-          <line x1="26" y1="160" x2="27" y2="240" stroke="#b3a06a" stroke-width="1" opacity="0.7"/>
-          <line x1="2" y1="172" x2="52" y2="226" stroke="#8f8157" stroke-width="0.9" opacity="0.6"/>
-          <line x1="50" y1="172" x2="0" y2="226" stroke="#8f8157" stroke-width="0.9" opacity="0.6"/>
-          <line x1="-8" y1="186" x2="40" y2="234" stroke="#8f8157" stroke-width="0.7" opacity="0.5"/>
-          <line x1="60" y1="186" x2="12" y2="234" stroke="#8f8157" stroke-width="0.7" opacity="0.5"/>
-          <circle cx="26" cy="154" r="4" fill="#5b5340"/>
-          <circle cx="72" cy="194" r="4" fill="#5b5340"/>
-          <circle cx="27" cy="246" r="4" fill="#5b5340"/>
-          <circle cx="-20" cy="200" r="4" fill="#5b5340"/>
-          <circle cx="25" cy="153" r="1.4" fill="#9a8b66" opacity="0.85"/>
-          <circle cx="71" cy="193" r="1.4" fill="#9a8b66" opacity="0.85"/>
-          <circle cx="26" cy="245" r="1.4" fill="#9a8b66" opacity="0.85"/>
-          <circle cx="-21" cy="199" r="1.4" fill="#9a8b66" opacity="0.85"/>
+          <path d="M65 209 Q79 204 62 188" stroke="#8f8157" stroke-width="2.2" fill="none"/>
+          <path d="M56 154 L102 194 L57 246 L10 200 Z" fill="rgba(160,140,92,0.18)" stroke="url(#r-rope)" stroke-width="2"/>
+          <path d="M56 168 L88 196 L57 230 L26 200 Z" stroke="url(#r-rope)" stroke-width="1.5" fill="none"/>
+          <path d="M56 182 L73 197 L57 215 L39 200 Z" stroke="url(#r-rope)" stroke-width="1.2" fill="none"/>
+          <line x1="15" y1="200" x2="98" y2="199" stroke="#b3a06a" stroke-width="1" opacity="0.7"/>
+          <line x1="56" y1="160" x2="57" y2="240" stroke="#b3a06a" stroke-width="1" opacity="0.7"/>
+          <line x1="32" y1="172" x2="82" y2="226" stroke="#8f8157" stroke-width="0.9" opacity="0.6"/>
+          <line x1="80" y1="172" x2="30" y2="226" stroke="#8f8157" stroke-width="0.9" opacity="0.6"/>
+          <line x1="22" y1="186" x2="70" y2="234" stroke="#8f8157" stroke-width="0.7" opacity="0.5"/>
+          <line x1="90" y1="186" x2="42" y2="234" stroke="#8f8157" stroke-width="0.7" opacity="0.5"/>
+          <circle cx="56" cy="154" r="4" fill="#5b5340"/>
+          <circle cx="102" cy="194" r="4" fill="#5b5340"/>
+          <circle cx="57" cy="246" r="4" fill="#5b5340"/>
+          <circle cx="10" cy="200" r="4" fill="#5b5340"/>
+          <circle cx="55" cy="153" r="1.4" fill="#9a8b66" opacity="0.85"/>
+          <circle cx="101" cy="193" r="1.4" fill="#9a8b66" opacity="0.85"/>
+          <circle cx="56" cy="245" r="1.4" fill="#9a8b66" opacity="0.85"/>
+          <circle cx="9" cy="199" r="1.4" fill="#9a8b66" opacity="0.85"/>
         </g>
       </g>
     </g>
@@ -252,7 +252,7 @@ export const retiariusBones: BoneDef[] = [
   { name: "torso", px: 138, py: 218 },
   { name: "arm-l", px: 114, py: 154 },
   { name: "forearm-l", px: 92, py: 174 },
-  { name: "net", px: 34, py: 198 },
+  { name: "net", px: 64, py: 198 },
   { name: "arm-r", px: 154, py: 154 },
   { name: "forearm-r", px: 174, py: 174 },
   { name: "head", px: 138, py: 142 },

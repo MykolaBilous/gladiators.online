@@ -186,6 +186,7 @@ export function createPhaserArenaDemo(container: HTMLElement): () => void {
       return;
     }
 
+    arenaControls?.skipToEnd();
     statusEl.textContent = formatArenaResult(activeBattlePlan, activeFighterLabels);
   };
 

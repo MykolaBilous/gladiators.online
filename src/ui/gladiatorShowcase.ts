@@ -169,6 +169,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
   let activePhaserBattleWindow: PhaserBattleWindowHandle | null = null;
   let pendingPhaserBattleWindow: PhaserBattleWindowHandle | null = null;
   let phaserBattleWindowRenderId = 0;
+  let activePhaserArenaControls: PhaserArenaControls | null = null;
 
   function setBattleResultsButtonEnabled(enabled: boolean): void {
     for (const btn of battleResultsButtons) {
@@ -484,8 +485,13 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     disposePhaserBattleWindowHandle(activePhaserBattleWindow);
     pendingPhaserBattleWindow = null;
     activePhaserBattleWindow = null;
+    activePhaserArenaControls = null;
     phaserStageHostEl.replaceChildren();
     setPhaserBattleLoading(false);
+  }
+
+  function stopActivePhaserPlayback(): void {
+    activePhaserArenaControls?.stopPlayback();
   }
 
   function setPhaserBattleLoading(isLoading: boolean): void {
@@ -496,7 +502,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
 
   function renderPhaserBattleWindow(
     plan: BattlePlan,
-    options: { showLoading?: boolean; onBattleEvent?: (event: BattleEvent, p: BattlePlan) => void; onBattleComplete?: (p: BattlePlan) => void } = {},
+    options: { showLoading?: boolean; onAttackAnimationStart?: (event: BattleEvent) => void; onBattleEvent?: (event: BattleEvent, p: BattlePlan) => void; onBattleComplete?: (p: BattlePlan) => void } = {},
   ): Promise<BattleWindowHandle> {
     const renderId = ++phaserBattleWindowRenderId;
     const previousActiveWindow = activePhaserBattleWindow;
@@ -536,6 +542,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
       layer.classList.add("is-active");
       disposePhaserBattleWindowHandle(previousActiveWindow);
       activePhaserBattleWindow = handle;
+      activePhaserArenaControls = controls;
 
       if (pendingPhaserBattleWindow === handle) {
         pendingPhaserBattleWindow = null;
@@ -562,6 +569,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
             statusEl.textContent = status.message;
           }
         },
+        onAttackAnimationStart: options.onAttackAnimationStart,
         onBattleEvent: options.onBattleEvent,
         onBattleComplete: (p) => {
           options.onBattleComplete?.(p);
@@ -605,9 +613,11 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
   function playPhaserBattleWindow(plan: BattlePlan): Promise<BattleWindowHandle> {
     return renderPhaserBattleWindow(plan, {
       showLoading: true,
+      onAttackAnimationStart: (event) => {
+        battleAudio.playAttack(event.attackCssClass);
+      },
       onBattleEvent: (event, battlePlan) => {
         if (event.actionType !== "move" && event.actionType !== "recover") {
-          battleAudio.playAttack(event.attackCssClass);
           if (event.outcome === "hit" && event.damage > 0) battleAudio.playBlood();
           else if (event.outcome === "block") battleAudio.playBlock(getFighterClassId(event.defenderId));
           appendLog(event);
@@ -793,6 +803,7 @@ export function createGladiatorShowcase(container: HTMLElement): () => void {
     overlay,
     prepareNextBattleWithCurrentSettings,
     playBattleWindow: playPhaserBattleWindow,
+    freezeBattleWindow: stopActivePhaserPlayback,
     resetBattleUi,
     resetBattleUiClasses: resetFighterClasses,
     resetToInitialState,

@@ -49,6 +49,7 @@ export interface BattleLifecycleContext {
   overlay: HTMLElement;
   prepareNextBattleWithCurrentSettings: () => void;
   playBattleWindow?: (plan: BattlePlan) => Promise<BattleWindowHandle>;
+  freezeBattleWindow?: () => void;
   resetBattleUi: (plan: BattlePlan) => void;
   resetBattleUiClasses: () => void;
   resetToInitialState: () => void;
@@ -80,6 +81,7 @@ export function createBattleLifecycleController({
   overlay,
   prepareNextBattleWithCurrentSettings,
   playBattleWindow,
+  freezeBattleWindow,
   resetBattleUi,
   resetBattleUiClasses,
   resetToInitialState,
@@ -104,6 +106,10 @@ export function createBattleLifecycleController({
         timers,
         handleBattleClick,
         prepareNextBattleWithCurrentSettings,
+        replayBattle: () => {
+          state.isBattleComplete = false;
+          return playBattlePlan(plan);
+        },
       },
       plan,
       stats,
@@ -182,6 +188,7 @@ export function createBattleLifecycleController({
     state.currentRun += 1;
     clearPendingTimers(true);
     battleAudio.stopAll();
+    freezeBattleWindow?.();
     state.isBattlePlaying = false;
     applyBattlePlanInstantly(plan);
     finishBattle(plan);

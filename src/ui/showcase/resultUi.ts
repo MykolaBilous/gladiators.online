@@ -172,6 +172,7 @@ export interface BattleFinaleContext {
   timers: Map<number, (() => void) | null>;
   handleBattleClick: () => Promise<void>;
   prepareNextBattleWithCurrentSettings: () => void;
+  replayBattle: () => Promise<void>;
 }
 
 export function clearBattleFinale(stageEl: HTMLElement): void {
@@ -323,12 +324,14 @@ export function showBattleFinale(
   const actions = document.createElement("div");
   const newBattleButton = document.createElement("button");
   const resultsButton = document.createElement("button");
+  const replayBattleButton = document.createElement("button");
   const saveSettingsButton = document.createElement("button");
   const {
     stageEl,
     timers,
     handleBattleClick,
     prepareNextBattleWithCurrentSettings,
+    replayBattle,
   } = context;
 
   clearBattleFinale(stageEl);
@@ -402,7 +405,18 @@ export function showBattleFinale(
     prepareNextBattleWithCurrentSettings();
   });
 
-  actions.append(resultsButton, saveSettingsButton, newBattleButton);
+  replayBattleButton.className = "battle-finale-button battle-finale-button-secondary";
+  replayBattleButton.type = "button";
+  replayBattleButton.dataset["replayBattle"] = "true";
+  replayBattleButton.textContent = "Переглянути бій ще раз";
+
+  replayBattleButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    clearBattleFinale(stageEl);
+    void replayBattle();
+  });
+
+  actions.append(resultsButton, replayBattleButton, saveSettingsButton, newBattleButton);
   finale.append(kicker, title, subtitle, metrics, actions);
   stageEl.appendChild(finale);
   launchConfetti(stageEl, timers);
