@@ -24,7 +24,6 @@ export const statLabels: Record<string, string> = {
   hp: "HP",
   attack: "АТК",
   defense: "ЗАХ",
-  speed: "ШВД",
   dexterity: "СПР",
   endurance: "ВТР",
 };
@@ -33,7 +32,6 @@ export const statDisplayMaximums: Record<GladiatorStatKey, number> = {
   hp: 180,
   attack: 150,
   defense: 150,
-  speed: 150,
   dexterity: 150,
   endurance: 150,
 };
@@ -126,6 +124,7 @@ export function createTypeCard(gladiator: GladiatorClass): string {
       <div class="gladiator-equip">
         <span><span class="equip-icon">Меч</span> ${gladiator.weapon}</span>
         <span><span class="equip-icon">Захист</span> ${gladiator.defense}</span>
+        <span><span class="equip-icon">Темп</span> ${gladiator.movementSpeed.toFixed(2)} м/с</span>
       </div>
       <div class="gladiator-stats">${stats}</div>
       <div class="move-chips">${attacks}</div>

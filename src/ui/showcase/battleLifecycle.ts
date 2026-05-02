@@ -93,7 +93,6 @@ export function createBattleLifecycleController({
   statusEl,
   syncBattleButtonState,
   timers,
-  wait,
 }: BattleLifecycleContext): BattleLifecycleController {
   function renderBattleResult(plan: BattlePlan, stats: BattleResultStats): void {
     renderBattleResultUi(resultEl, plan, stats);

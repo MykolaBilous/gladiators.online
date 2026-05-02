@@ -3,6 +3,7 @@ import type {
   BattleReplaySetup,
 } from "@gladiators/combat-sim";
 import type {
+  BattlePoint,
   BattlePlan,
 } from "@gladiators/combat-sim";
 import { createBattlePlan, gladiatorClasses } from "@gladiators/combat-sim";
@@ -58,13 +59,10 @@ import {
   createTypeCard,
 } from "./showcase/training";
 import {
-  SPAWN_GRID_CENTER_COLUMN,
-  SPAWN_GRID_CENTER_ROW,
   cloneBattlePoints,
   cloneManualSpawnPlacements,
   createManualPlacementPanel,
   createSpawnPositions,
-  getSpawnCellPoint,
   getTeamSpawnCellKey,
   isSameSpawnCell,
   isValidSpawnCell,

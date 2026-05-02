@@ -2050,10 +2050,6 @@
   background: linear-gradient(90deg, #4080e0, #60c0f0);
 }
 
-.stat-bar-fill[data-stat="speed"] {
-  background: linear-gradient(90deg, #40c080, #a0f060);
-}
-
 .stat-bar-fill[data-stat="dexterity"] {
   background: linear-gradient(90deg, #36b0a0, #e0d850);
 }

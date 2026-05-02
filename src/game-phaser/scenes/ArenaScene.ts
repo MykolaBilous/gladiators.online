@@ -1,5 +1,10 @@
 import * as Phaser from "phaser";
-import type { BattleEvent, BattlePlan, BattlePoint } from "@gladiators/combat-sim";
+import type {
+  BattleEvent,
+  BattleMotionSegment,
+  BattlePlan,
+  BattlePoint,
+} from "@gladiators/combat-sim";
 import {
   createArenaFighterInfos,
   formatArenaResult,
@@ -30,6 +35,7 @@ interface FighterView {
   classId: PhaserFighterClassId;
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
+  nameplate: Phaser.GameObjects.Container;
   hpText: Phaser.GameObjects.Text;
   maxHp: number;
   currentAnimationState: PhaserFighterAnimationState;
@@ -48,8 +54,6 @@ const OUTCOME_TEXT: Record<BattleEvent["outcome"], string> = {
   miss: "\u0443\u0445\u0438\u043b\u0435\u043d\u043d\u044f",
 };
 
-const MOVEMENT_MIN_MS = 220;
-const MOVEMENT_MAX_MS = 820;
 const WALK_ANIMATION_PAD_MS = 140;
 const HIT_RECOIL_MS = 150;
 const SOFT_EASE = "Sine.easeInOut";
@@ -88,6 +92,8 @@ export class ArenaScene extends Phaser.Scene {
   private battlePlan: BattlePlan | null = null;
   private readonly fighterViews = new Map<string, FighterView>();
   private readonly defeatedFighterIds = new Set<string>();
+  private readonly motionTracks = new Map<string, BattleMotionSegment[]>();
+  private motionPlaybackStartedAtMs: number | null = null;
   private hasStarted = false;
 
   constructor() {
@@ -99,6 +105,8 @@ export class ArenaScene extends Phaser.Scene {
     this.battlePlan = data.battlePlan;
     this.fighterViews.clear();
     this.defeatedFighterIds.clear();
+    this.motionTracks.clear();
+    this.motionPlaybackStartedAtMs = null;
     this.hasStarted = false;
   }
 
@@ -115,7 +123,7 @@ export class ArenaScene extends Phaser.Scene {
     });
     this.arenaData.onControlsReady?.({
       startPlayback: () => this.startBattlePlayback(),
-      stopPlayback: () => this.time.removeAllEvents(),
+      stopPlayback: () => this.stopBattlePlayback(),
       skipToEnd: () => this.skipToEnd(),
     });
 
@@ -201,10 +209,14 @@ export class ArenaScene extends Phaser.Scene {
         .sprite(0, 0, idleKey, 0)
         .setOrigin(definition.originX, definition.originY)
         .setDisplaySize(definition.displayWidth, definition.displayHeight);
+      const footprint = this.createFootprint(
+        plan.fighters[fighter.id]?.bodyRadius ?? 0.028,
+        fighter.teamId,
+      );
       const nameplate = this.createNameplate(fighter.label, maxHp, fighter.teamId);
 
       sprite.setFlipX(fighter.teamId === "right");
-      container.add([sprite, nameplate.container]);
+      container.add([footprint, sprite, nameplate.container]);
 
       const view: FighterView = {
         id: fighter.id,
@@ -212,6 +224,7 @@ export class ArenaScene extends Phaser.Scene {
         classId,
         container,
         sprite,
+        nameplate: nameplate.container,
         hpText: nameplate.hpText,
         maxHp,
         currentAnimationState: "idle",
@@ -231,6 +244,21 @@ export class ArenaScene extends Phaser.Scene {
       this.positionFighter(fighter.id, startPoint, 0);
       data.onHealthChange?.({ fighterId: fighter.id, hp: maxHp, maxHp });
     }
+  }
+
+  private createFootprint(
+    bodyRadius: number,
+    teamId: "left" | "right",
+  ): Phaser.GameObjects.Ellipse {
+    const radiusPx = bodyRadius * (PHASER_ARENA_WIDTH - 192);
+    const width = Phaser.Math.Clamp(radiusPx * 2.16, 72, 184);
+    const height = Phaser.Math.Clamp(width * 0.32, 24, 58);
+    const color = teamId === "left" ? 0x5fb6ff : 0xff6666;
+    const footprint = this.add.ellipse(0, -8, width, height, color, 0.08);
+
+    footprint.setStrokeStyle(2, color, 0.16);
+
+    return footprint;
   }
 
   private createNameplate(
@@ -283,6 +311,12 @@ export class ArenaScene extends Phaser.Scene {
   private playBattle(data: ArenaSceneData, plan: BattlePlan): void {
     const fighterIds = Array.from(this.fighterViews.keys());
     const events = getArenaBattleEvents(plan, fighterIds);
+    this.motionTracks.clear();
+    for (const [fighterId, track] of createPlaybackMotionTracks(plan, fighterIds)) {
+      this.motionTracks.set(fighterId, track);
+    }
+    this.motionPlaybackStartedAtMs = this.time.now;
+    this.applyMotionClock(0);
 
     data.onStatus?.({
       phase: "playing",
@@ -295,15 +329,19 @@ export class ArenaScene extends Phaser.Scene {
       });
     }
 
-    const lastEvent = events.at(-1);
-    const completeAt = lastEvent
-      ? Math.round((lastEvent.timeMs + lastEvent.movement.durationMs + lastEvent.impactDelayMs) * PHASER_PLAYBACK_SCALE) + 900
-      : 900;
+    const completeAt =
+      Math.max(
+        getLastEventPlaybackResolutionMs(events),
+        Math.round(getLastMotionTrackEndMs(this.motionTracks) * PHASER_PLAYBACK_SCALE),
+      ) + 900;
 
     this.time.delayedCall(completeAt, () => {
       const message = formatArenaResult(plan, data.fighterLabels);
       const winner = this.fighterViews.get(plan.winnerId);
       const loser = this.fighterViews.get(plan.loserId);
+
+      this.applyMotionClock(plan.durationMs);
+      this.motionPlaybackStartedAtMs = null;
 
       if (winner) {
         this.playFighterAnimation(winner, "victory", { hold: true });
@@ -318,15 +356,7 @@ export class ArenaScene extends Phaser.Scene {
 
       if (loser && !this.defeatedFighterIds.has(plan.loserId)) {
         this.defeatedFighterIds.add(plan.loserId);
-        this.playFighterAnimation(loser, "defeat", { hold: true });
-        this.tweens.add({
-          targets: loser.container,
-          alpha: 0.62,
-          angle: loser.teamId === "left" ? -7 : 7,
-          y: loser.container.y + 26,
-          duration: 520,
-          ease: SOFT_EASE,
-        });
+        this.applyDefeatedVisual(loser);
       }
 
       data.onStatus?.({
@@ -338,6 +368,57 @@ export class ArenaScene extends Phaser.Scene {
     });
   }
 
+  update(_time: number): void {
+    if (this.motionPlaybackStartedAtMs === null) {
+      return;
+    }
+
+    const elapsedMs = this.time.now - this.motionPlaybackStartedAtMs;
+    this.applyMotionClock(elapsedMs / PHASER_PLAYBACK_SCALE);
+  }
+
+  private applyMotionClock(clockMs: number): void {
+    if (!this.battlePlan) {
+      return;
+    }
+
+    for (const view of this.fighterViews.values()) {
+      const startPoint = this.battlePlan.startPositions[view.id] ?? fallbackStartPoint(view.teamId);
+      const sample = sampleMotionTrack(startPoint, this.motionTracks.get(view.id) ?? [], clockMs);
+
+      this.applyFighterPoint(view, sample.point);
+      this.syncLocomotionAnimation(view, sample.moving);
+    }
+  }
+
+  private syncLocomotionAnimation(view: FighterView, moving: boolean): void {
+    if (this.defeatedFighterIds.has(view.id)) {
+      return;
+    }
+
+    if (moving) {
+      if (view.currentAnimationState === "idle") {
+        this.playFighterAnimation(view, "walk", { hold: true });
+      }
+      return;
+    }
+
+    if (view.currentAnimationState === "walk") {
+      this.playFighterAnimation(view, "idle");
+    }
+  }
+
+  private stopBattlePlayback(): void {
+    this.time.removeAllEvents();
+    this.motionPlaybackStartedAtMs = null;
+
+    for (const view of this.fighterViews.values()) {
+      if (view.currentAnimationState === "walk") {
+        this.playFighterAnimation(view, "idle");
+      }
+    }
+  }
+
   private playBattleEvent(event: BattleEvent): void {
     if (
       this.defeatedFighterIds.has(event.attackerId) ||
@@ -346,10 +427,7 @@ export class ArenaScene extends Phaser.Scene {
       return;
     }
 
-    const moveMs = getScaledDuration(event.movement.durationMs, MOVEMENT_MIN_MS, MOVEMENT_MAX_MS);
-
-    this.positionFighter(event.attackerId, event.movement.attackerTo, moveMs);
-    this.positionFighter(event.defenderId, event.movement.defenderTo, moveMs);
+    const moveMs = getMovementPlaybackDuration(event);
 
     if (event.actionType === "move" || event.actionType === "recover") {
       return;
@@ -449,8 +527,8 @@ export class ArenaScene extends Phaser.Scene {
         "hit",
       );
       this.tweens.add({
-        targets: defender.container,
-        x: defender.container.x + 12 * Math.sign(defenderX - attackerX),
+        targets: defender.sprite,
+        x: 12 * Math.sign(defenderX - attackerX),
         yoyo: true,
         duration: HIT_RECOIL_MS,
         ease: SOFT_EASE,
@@ -462,15 +540,7 @@ export class ArenaScene extends Phaser.Scene {
         this.time.delayedCall(HIT_RECOIL_MS + 60, () => {
           const view = this.fighterViews.get(defeatedId);
           if (view && this.defeatedFighterIds.has(defeatedId)) {
-            this.playFighterAnimation(view, "defeat", { hold: true });
-            this.tweens.add({
-              targets: view.container,
-              alpha: 0.62,
-              angle: view.teamId === "left" ? -7 : 7,
-              y: view.container.y + 26,
-              duration: 520,
-              ease: SOFT_EASE,
-            });
+            this.applyDefeatedVisual(view);
           }
         });
       }
@@ -919,9 +989,7 @@ export class ArenaScene extends Phaser.Scene {
     if (durationMs <= 0) {
       view.movementTween?.remove();
       view.movementTween = null;
-      view.container.setPosition(projected.x, projected.y);
-      view.container.setScale(projected.scale);
-      view.container.setDepth(projected.depth);
+      this.applyFighterPoint(view, point);
       return;
     }
 
@@ -954,6 +1022,49 @@ export class ArenaScene extends Phaser.Scene {
       },
     });
     view.movementTween = movementTween;
+  }
+
+  private applyFighterPoint(view: FighterView, point: BattlePoint): void {
+    const projected = projectBattlePoint(point);
+    const depthOffset = this.defeatedFighterIds.has(view.id) ? -18 : 0;
+
+    view.container.setPosition(projected.x, projected.y);
+    view.container.setScale(projected.scale);
+    view.container.setDepth(projected.depth + depthOffset);
+  }
+
+  private applyDefeatedVisual(view: FighterView): void {
+    view.resetAnimationEvent?.remove(false);
+    view.resetAnimationEvent = null;
+    this.releaseCaughtNet(view);
+    this.playFighterAnimation(view, "defeat", { hold: true });
+    view.nameplate.setAlpha(0);
+
+    this.tweens.add({
+      targets: view.container,
+      alpha: 0.38,
+      angle: view.teamId === "left" ? -9 : 9,
+      duration: 520,
+      ease: SOFT_EASE,
+    });
+    this.tweens.add({
+      targets: view.sprite,
+      y: 22,
+      duration: 520,
+      ease: SOFT_EASE,
+    });
+    this.time.delayedCall(1_600, () => {
+      if (!this.defeatedFighterIds.has(view.id)) {
+        return;
+      }
+
+      this.tweens.add({
+        targets: view.container,
+        alpha: 0.24,
+        duration: 760,
+        ease: "Sine.easeOut",
+      });
+    });
   }
 
   private playFighterAnimation(
@@ -1031,6 +1142,8 @@ export class ArenaScene extends Phaser.Scene {
     const plan = this.battlePlan;
 
     this.time.removeAllEvents();
+    this.motionPlaybackStartedAtMs = null;
+    this.applyMotionClock(plan.durationMs);
 
     for (const view of this.fighterViews.values()) {
       view.movementTween?.remove();
@@ -1055,10 +1168,7 @@ export class ArenaScene extends Phaser.Scene {
 
     if (loser && !this.defeatedFighterIds.has(plan.loserId)) {
       this.defeatedFighterIds.add(plan.loserId);
-      this.playFighterAnimation(loser, "defeat", { hold: true });
-      loser.container.setAlpha(0.62);
-      loser.container.setAngle(loser.teamId === "left" ? -7 : 7);
-      loser.container.setY(loser.container.y + 26);
+      this.applyDefeatedVisual(loser);
     }
 
     const message = formatArenaResult(plan, this.arenaData.fighterLabels);
@@ -1071,6 +1181,10 @@ function fallbackStartPoint(teamId: "left" | "right"): BattlePoint {
   return teamId === "left" ? { x: 0.12, y: 0.68 } : { x: 0.9, y: 0.58 };
 }
 
+function getMovementPlaybackDuration(event: BattleEvent): number {
+  return Math.round(Math.max(0, event.movement.durationMs * PHASER_PLAYBACK_SCALE));
+}
+
 function getImpactPlaybackDelay(event: BattleEvent): number {
   if (event.actionType === "javelin") {
     return getScaledDuration(event.impactDelayMs, 620, 1_500);
@@ -1081,6 +1195,120 @@ function getImpactPlaybackDelay(event: BattleEvent): number {
   }
 
   return getScaledDuration(event.impactDelayMs, 120, 720);
+}
+
+function getLastEventPlaybackResolutionMs(events: readonly BattleEvent[]): number {
+  return events.reduce((latest, event) => {
+    const resolutionMs =
+      Math.round(event.timeMs * PHASER_PLAYBACK_SCALE) +
+      getMovementPlaybackDuration(event) +
+      getImpactPlaybackDelay(event);
+
+    return Math.max(latest, resolutionMs);
+  }, 0);
+}
+
+function getLastMotionTrackEndMs(
+  tracks: ReadonlyMap<string, readonly BattleMotionSegment[]>,
+): number {
+  let lastEndMs = 0;
+
+  for (const track of tracks.values()) {
+    for (const segment of track) {
+      lastEndMs = Math.max(lastEndMs, segment.endMs);
+    }
+  }
+
+  return lastEndMs;
+}
+
+function createPlaybackMotionTracks(
+  plan: BattlePlan,
+  fighterIds: readonly string[],
+): Map<string, BattleMotionSegment[]> {
+  const tracks = (plan as BattlePlan & {
+    readonly motionTracks?: Record<string, BattleMotionSegment[]>;
+  }).motionTracks;
+
+  if (tracks) {
+    return new Map(
+      fighterIds.map((fighterId) => [
+        fighterId,
+        [...(tracks[fighterId] ?? [])].sort((a, b) => a.startMs - b.startMs),
+      ]),
+    );
+  }
+
+  return createFallbackMotionTracks(plan, fighterIds);
+}
+
+function createFallbackMotionTracks(
+  plan: BattlePlan,
+  fighterIds: readonly string[],
+): Map<string, BattleMotionSegment[]> {
+  const selected = new Set(fighterIds);
+  const tracks = new Map<string, BattleMotionSegment[]>(
+    fighterIds.map((fighterId) => [fighterId, []]),
+  );
+
+  for (const event of plan.events) {
+    if (!selected.has(event.attackerId) || event.movement.durationMs <= 0) {
+      continue;
+    }
+
+    tracks.get(event.attackerId)?.push({
+      fighterId: event.attackerId,
+      from: event.movement.attackerFrom,
+      to: event.movement.attackerTo,
+      startMs: event.timeMs,
+      endMs: event.timeMs + event.movement.durationMs,
+      actionType: event.actionType,
+      rush: event.movement.rush,
+    });
+  }
+
+  return tracks;
+}
+
+function sampleMotionTrack(
+  startPoint: BattlePoint,
+  track: readonly BattleMotionSegment[],
+  clockMs: number,
+): { point: BattlePoint; moving: boolean } {
+  let currentPoint = startPoint;
+
+  for (const segment of track) {
+    if (clockMs < segment.startMs) {
+      return { point: currentPoint, moving: false };
+    }
+
+    if (clockMs <= segment.endMs) {
+      const progress =
+        segment.endMs <= segment.startMs
+          ? 1
+          : Phaser.Math.Clamp((clockMs - segment.startMs) / (segment.endMs - segment.startMs), 0, 1);
+
+      return {
+        point: interpolateBattlePoint(segment.from, segment.to, progress),
+        moving: getBattlePointDistance(segment.from, segment.to) > 0.001 && progress < 1,
+      };
+    }
+
+    currentPoint = segment.to;
+  }
+
+  return { point: currentPoint, moving: false };
+}
+
+function interpolateBattlePoint(from: BattlePoint, to: BattlePoint, progress: number): BattlePoint {
+  return {
+    x: from.x + (to.x - from.x) * progress,
+    y: from.y + (to.y - from.y) * progress,
+  };
+}
+
+function getBattlePointDistance(from: BattlePoint, to: BattlePoint): number {
+  return Math.hypot(from.x - to.x, from.y - to.y);
 }
 
 function formatDurationMs(durationMs: number): string {
